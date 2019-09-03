@@ -1,0 +1,572 @@
+---
+title: "Report: Body-sites microbiome in animal model"
+subtitle: "Part 2: Clinical treatment for disturbance of local microbiota"
+author: "Aurea Simon-Soro"
+date: \today
+output:
+  pdf_document: default
+  html_document: default
+---
+
+<!-- ================================================================================================ -->
+<!--   Beginning of Preamble : Preamble seldom requires change                                        -->
+<!-- ================================================================================================ -->
+
+<!-- knitr setup -->
+```{r knitr setup, echo=FALSE}
+### ================
+###   knitr setup
+### ================
+library(knitr)
+opts_chunk$set(
+  tidy=FALSE,
+  cache=TRUE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  dpi=100,
+  fig.width=8,
+  fig.height=8,
+  fig.align = "center"
+  )
+```
+
+<!-- R packages -->
+```{r R packages, message=FALSE}
+### ================
+###   R packages
+### ================
+#This package will also help us more easily manipulate our data
+library(dplyr)
+library(magrittr)
+library(qiimer)
+library(pander)
+#Analyses of Phylogenetics and Evolution package. Required for tree calculations to be used with phyloseq
+library(ape)
+#The vegan package provides tools for descriptive community ecology. It has most basic functions of diversity analysis, community ordination and dissimilarity analysis. In general, this package is used for Bray-Curtis and Jaccard analyses.
+library(vegan)
+#Graphing package used in phyloseq. To edit the default setting of a plot, you need to use functions in this package.
+library(ggplot2)
+#This package is used to calculate and plot Venn diagrams as well as heatmaps
+library(gplots)
+library(pheatmap)
+#This package will help us more easily manipulate our data, which are matrices
+library(tidyr)
+library(usedist)
+library(readr)
+library(tibble)
+#Linear mixed-effects models like repeated measures analysis
+library(lme4)
+#used to read in mothur-formatted files
+library(phangorn)
+#The phyloseq package seeks to address issues with multiple microbiome analysis packages by providing a set of functions that internally manage the organizing, linking, storing, and analyzing of phylogenetic sequencing data. In general, this package is used for UniFrac analyses.
+library(phyloseq)
+#Pretty Venn disgrams
+library(VennDiagram)
+library(ggbeeswarm)
+library(ggtern)
+library(ggthemes)
+library(reshape2)
+library(kylemisc)
+```
+
+
+
+<!-- resources -->
+```{r resources}
+### ================
+###   R resources
+### ================
+source("/home/aurea/R_functions.R")
+source(file="/home/aurea/1_way_pcoa.R")
+```
+
+
+<!-- ================================================================================================ -->
+<!--   End of Preamble                                                                                -->
+<!-- ================================================================================================ -->
+
+<!-- ================================================================================================ -->
+<!--   Beginning of Project Specific Items                                                            -->
+<!-- ================================================================================================ -->
+
+```{r}
+### ===========================
+###   define constants
+### ===========================
+### minimum reads threshold
+min_reads <- 1000
+### rarefying subsample size 
+richness_subsample_size <- 1000
+### number of samples threshold to show heatmap on the page
+sample_threshold <- 100
+### setwd
+#fill in your project dir
+root_dir = "/home/aurea/Koo/Shared.Species.BODYSITE/Input.Files"
+### mapping file path
+mapping_file_fp <- file.path(root_dir, "MF.Aurea.txt")
+### otu table file path
+feature_table_fp <- file.path(root_dir, "feature-table.tsv")
+### taxonomic assignment 
+taxo_assignment_fp <- file.path(root_dir, "taxonomy.tsv")
+### unweighted UniFrac file path
+uu_fp <- file.path(root_dir, "uu.distance-matrix.tsv")
+### weighted UniFrac file path
+wu_fp <- file.path(root_dir, "wu.distance-matrix.tsv")
+### Jaccard Distances file path
+jc_fp <- file.path(root_dir, "jc.distance-matrix.tsv")
+### Bray-Curtis Dissimilarities file path
+bc_fp <- file.path(root_dir, "bc.distance-matrix.tsv")
+### faith
+faith_fp <- file.path(root_dir, "alpha-diversity.tsv")
+```
+
+```{r, warning=F}
+### ===========================
+###   read in data
+### ===========================
+### read mapping file
+s <- read_qiime_mapping_file(mapping_file_fp) 
+### check for the column names to assign color_by and shape_by for pcoa plots
+color_by <- NULL
+shape_by <- NULL
+potential_headers <- c("SampleType", "study_group", "cage_number")
+header_idx = which(is.element(potential_headers, colnames(s)))
+if(length(header_idx)>0) {
+  color_by <- potential_headers[header_idx[1]]
+}
+if(length(header_idx)>1) {
+  shape_by <- potential_headers[header_idx[2]]
+}
+### read otu table
+counts <- readr::read_delim(feature_table_fp, skip=1, delim="\t") %>%
+  column_to_rownames(var = "#OTU ID") %>%
+  as.matrix()
+### get read counts
+read_counts <- colSums(counts) %>% 
+  as.data.frame() %>%
+  setNames(c("Read_Counts")) %>%
+  rownames_to_column(var="SampleID")
+### find the samples to keep
+s <- merge(s, read_counts, by="SampleID", all.x=T) %>%
+  mutate(Keep = Read_Counts > min_reads) %>%
+  mutate(isControl = grepl("geneblock|freewater|extract", SampleID, ignore.case = TRUE))
+#trun_taxon perl expression is to get rid of trailing "; s__" since it doesn't add any new information
+### taxonomic assignment
+ta <- read_delim(file=taxo_assignment_fp, delim="\t") %>%
+  mutate(trunc_taxon = sub('(; [kpcofgs]__)+$', "", Taxon, perl=T)) %>%
+  arrange(order(match(rownames(counts), `Feature ID`)))
+### check if the order of the assignments and the order of featue table is the same
+if (!all(rownames(counts) == ta$`Feature ID`)) {
+  stop (simpleError("The order of the features in the table and classifications don't match"))
+}
+adf <- split_assignments(ta$trunc_taxon) 
+### remove contamination
+is_mitochondrial <- grepl("mitochondria", adf$Family)
+is_chloroplast <- grepl("Chloroplast", adf$Class)
+is_unassigned <- grepl("Unassigned", adf$Kingdom)
+is_archaea <- grepl("Archaea", adf$Kingdom)
+is_contam <- is_mitochondrial | is_chloroplast | is_unassigned ### Archaea kept to check positive control samples
+counts <- counts[!is_contam,]
+adf <- adf[!is_contam,]
+ta <- ta[!is_contam,]
+rm(is_contam, is_mitochondrial, is_chloroplast, is_unassigned, is_archaea)
+a <- simplify_assignments(adf, rank1="Phylum", rank2="Genus")
+names(a) <- ta$`Feature ID`
+summed_cts <- rowsum(counts, a) 
+summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/")
+#if we want all the otus
+ all_otus <- counts %>%
+   merge(ta[,c("Feature ID","Confidence","trunc_taxon")], by.x="row.names", by.y="Feature ID", all.x=T) %>%
+   dplyr::rename(Taxon = trunc_taxon) %>%
+   dplyr::rename(`Feature ID` = Row.names)
+# 
+# write.csv(x = all_otus, file = "all_otus.csv", row.names = F)
+```
+
+
+```{r, Samples error check 1}
+### ===========================
+###   check for missing samples
+### ===========================
+### possible issue 1: Samples found in the sample sheet but not in the feature table (0 reads)
+s_missing <- s %>%
+  filter(!SampleID %in% colnames(counts)) %>%
+  select(SampleID, SampleType, isControl)
+if (any(!s_missing$isControl)) {
+  pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but not in the feature table.")
+}
+```
+
+
+```{r, Samples error check 2}
+### possible issue 2: Samples found in the feature table but not in the sample sheet. There must be an error!
+in_counts_not_in_s <- setdiff(colnames(counts), s$SampleID)
+if (length(in_counts_not_in_s) > 0) {
+  stop (simpleError("These SampleID(s) are in the feature table, but not found in the sample sheet.", paste(in_counts_not_in_s, collapse=" ")))
+}
+s[s$SampleID %in% s_missing$SampleID, "Keep"] <- FALSE
+```
+
+
+```{r theme, include=FALSE}
+theme_set(theme_classic() + theme(
+axis.line.x = element_line(colour = 'black', size=0.5, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=0.5, linetype='solid'))) 
+
+theme_boxplot <- function () {theme_base(base_size = 15) + 
+                theme(line = element_line(size=0.8),
+                text = element_text(size = 10),
+                axis.text.x = element_text(color="black"),
+                axis.text.y = element_text(color="black"),
+                plot.background=element_blank())}
+
+theme_figures <- function () {theme_kyle() +
+                theme(line = element_line(size=0.8),
+                text = element_text(size = 15),
+                axis.text.x = element_text(color="black"),
+                axis.text.y = element_text(color="black"),
+                plot.background=element_blank())}
+```
+
+
+```{r general quantification, include=FALSE}
+## Whole samples that are above the `r min_reads` read count threshold
+pander(table(s[, color_by], factor(ifelse(s$Keep, "Keep", "Discard"))))
+
+#Subset samples geneBlock_DNA
+s <- filter(s, !is.na(HostSpecies))
+
+
+#Subset for the TXT of interest with sucrose as water
+s <- filter (s, Water=="Sucrose") %>%
+  filter(study_group %in% c("PBS", "TB", "Control", "CHX")) 
+
+```
+
+
+```{r arrange_and_counts, include=FALSE}
+
+#Re-order categories
+s$study_group <- reorder(s$study_group, new.order = c("Control", "CHX", "PBS","TB"))
+s$SampleType <- reorder(s$SampleType, new.order = c("Dental Plaque", "Oral Swab", "Feces"))
+
+
+```
+
+```{r Color Palette, include=FALSE}
+cols_group <- c("Control"= "#0000C0", "CHX" ="#76069A", "PBS" ="#ffac57", "TB"= "#c667ef")
+
+cols_Site <- c("Dental Plaque"= "#4743c7", "Oral Swab"= "#6ad54a", "Feces"= "#ae1c00")
+
+
+```
+
+#TB as repurposing drug
+```{r Subset TB, include=FALSE}
+
+#Subset samples for TB study
+s.tb <- filter(s, study_group %in% c("PBS", "TB"))
+
+```
+
+
+##Alpha-diversity
+# Taxonomic heatmap
+```{r}
+prop_cut <- 0.01
+satu_limit <- 0.4
+heatmap_fp <- "otu_heatmap.pdf"
+show.text <- sum(s$Keep) > sample_threshold
+```
+
+Each column of the heatmap represents one sample and each row represents one taxon, typically a genus. Taxa were included in the chart if the abundance in any sample exceeded `r 100*prop_cut`%. 
+
+The chart is colored white if taxa were not observed in the sample, dark blue if taxa were observed at very low abundance. This allows the reader to quickly survey presence/absence. Abundance values exceeding `r 100*satu_limit`% are colored red, indicating an extremely dominant species.
+
+`r if(show.text){paste0("Please see attached plot ", heatmap_fp, ".")}`
+
+```{r, fig.height=12, fig.width=16}
+
+props_toPlot <- summed_props[, s.tb$SampleID]  
+grps <- c(color_by, shape_by)
+### grouped heatmap
+if (dim(s.tb)[1] > sample_threshold) {
+  heatmap_grouped(props_toPlot, s.tb, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit, fname = heatmap_fp)
+} else {
+  heatmap_grouped(props_toPlot, s.tb, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit)
+}
+
+```
+
+*Figure 1. Heatmap with the bacterial composition and abundances.** This plot shows the bacterial composition of the samples. Sample arrangement corresponds to sample type (dental plaque, oral swab and  feces) and study groups (treatments). We used ASV and GreenGenes database for taxonomy classification.
+\newpage
+# OTU Heatmap 
+```{r overall_heatmap_annotations, echo=FALSE}
+ann_colors <- list(SampleType=c("Dental Plaque"= "#4743c7", "Oral Swab"= "#6ad54a", "Feces"= "#ae1c00"))
+annotations <- s.tb[,c("SampleType", "study_group")]
+rownames(annotations) <- s.tb$SampleID
+```
+
+
+```{r PLOT OTU_Heatmap, fig.width=30, fig.height=19, echo=FALSE, render=FALSE}
+otu_heatmap(
+  otu_counts=counts[,s.tb$SampleID],
+  assignments=a,
+  annotation=annotations,
+  threshold=2000,
+  annotation_colors=ann_colors,
+  color = saturated_rainbow(100, saturation_limit = 0.4),
+  cluster_cols = TRUE, cluster_rows = TRUE,
+  fontsize_col = 10, fontsize_row = 12, 
+  cellwidth=10, cellheight=12, 
+    file = "heatmap_TB_Cluster.png"
+)
+```
+
+
+```{r DF Bacteria Proportions Melted}
+taxon_props <- props_toPlot[rowMeans(props_toPlot) > 0.01,]
+s_taxa <- t(taxon_props)[s.tb$SampleID,] 
+
+set.seed(2021)
+pc_df<- cbind(s.tb, s_taxa)
+
+#Create DF with the Bacteria in a single columns for all study_groups for all SampleTypes
+bact.prop <- melt(pc_df,id.vars=c('SubjectID', 'SampleType', 'study_group'), measure.vars=c(56:70)) 
+
+```
+
+#Bacteria with more than 1% mean relative abundance
+```{r Bar Plot Taxa, fig.height=5}
+ggplot(bact.prop, aes(x=study_group, y=value)) +
+ geom_col(aes(fill = variable), position="fill", stat = "identity") +
+ labs(x= "Treatment", y= "Bacterial Abundance") +
+   ggsci::scale_fill_d3(palette = c("category20")) +
+  labs(x="", y="Relative Abundance", fill="Bacteria") +
+  theme_boxplot() + 
+  facet_grid(~SampleType, scales= "free") +
+  theme(axis.text.x=element_text(angle=-50, hjust= .1))
+```
+
+
+```{r Rothia abundance, fig.height=5}
+ggplot(pc_df, aes(x=study_group, y=`p__Actinobacteria g__Rothia`)) +
+ geom_violin() +
+ labs(x= "Treatment", y= "Rothia Abundance") +
+  geom_beeswarm(alpha=0.5, aes(x=study_group, y=`p__Actinobacteria g__Rothia`, color=eval(parse(text=color_by)))) +
+  scale_color_manual(values = cols_Site) + 
+  facet_wrap(~SampleType) +
+  guides(color=FALSE) +
+      theme_boxplot()
+```
+
+```{r}
+
+filter(pc_df, SampleType=="Oral Swab") %>%
+ggplot(aes(x=`p__Firmicutes g__Streptococcus`, y=`p__Actinobacteria g__Rothia`), shape=study_group) +
+    geom_point(aes(x=`p__Firmicutes g__Streptococcus`, y=`p__Actinobacteria g__Rothia`, color=study_group), size=1, alpha=0.8, shape = 21, stroke = 2) +
+    geom_smooth(method = 'lm', col = "black") +
+      theme_boxplot() + 
+  facet_grid(~SampleType, scale = "free") + 
+  labs(x="Streptococcus", y="Rothia", color= "Treatment")
+
+```
+
+
+# Beta diversity
+## Unweighted UniFrac distances
+```{r}
+dist_fp <- bc_fp
+dist_name <- "Bray-Curtis Unifrac distances"
+```
+The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
+```{r Obtain the proportiona and axes for the amin genera}
+s.tb <- s %>%
+  filter(Keep) %>%
+  filter(!isControl)%>%
+  filter(study_group %in% c("PBS", "TB"))
+
+# Make sure the distance matrix is in the same order as the sample table
+dist_in <- usedist::dist_subset(read_qiime_distmat(bc_fp), s.tb$SampleID)
+# Here is the actual principal coordinates analysis
+pc <- pcoa(dist_in)
+# Get the first 3 principal coordinates as a matrix,
+#   make sure rows are in the same order as sample table
+s_coords <- pc$vectors[s.tb$SampleID,1:3]
+# Get the taxon proportions as a matrix,
+#   flip so that samples are in the rows,
+#   again make sure rows are in the correct order
+s_taxa <- t(taxon_props)[s.tb$SampleID,]
+
+# Stick the coordinates and taxon proportions onto
+#   the right side of the sample table
+pc_df <- cbind(s.tb, s_coords, s_taxa)
+
+```
+
+
+```{r PCoA arrow}
+# Make weights for each taxon
+# Weights should sum to 1, divide by total for each column
+taxon_weights <- apply(s_taxa, 2, function (x) x / sum(x))
+# Matrix multiplication seems tricky here,
+#   but we need to multiply sample weights by sample coordinates
+#   and sum to get the average. We need to do this for each coordinate
+#   axis and each taxon -- that's what matrix multiplication does.
+#   You can try it by hand for one coordinate axis and taxon and
+#   check that the answer is correct.
+taxon_centers_of_gravity <- t(taxon_weights) %*% s_coords
+# Convert to data frame
+taxon_centers_of_gravity <- as.data.frame(taxon_centers_of_gravity)
+# Dedicate one column to hold the taxon name
+taxon_centers_of_gravity$Taxon <- rownames(taxon_centers_of_gravity)
+
+# Splits the taxon name column by the 'space' into "Taxon" and "Taxon_name"
+taxon_centers_of_gravity <- separate(taxon_centers_of_gravity, Taxon, sep=" ", c("Taxon","Taxon_name"))
+# Removes the g__ or f__ in the Taxon_name column
+taxon_centers_of_gravity$Taxon_name <- substring(taxon_centers_of_gravity$Taxon_name, 4)
+
+#Percentaje of PC axes
+pc <- pcoa(dist_in)
+pctvar <- round(pc$values$Relative_eig * 100)
+
+```
+
+
+##PCoA by Body Sites
+```{r wu PCoA PLOT}
+library(ggrepel)
+
+bc_PCoA<- ggplot(pc_df) +
+  geom_point(aes(x=Axis.1, y=Axis.2, color= `p__Actinobacteria g__Rothia`, shape=SampleType), alpha=0.9, size=4) +
+  scale_color_gradientn(colours = c("steelblue","tomato")) +
+   labs(x=paste0("PC1 (", pctvar[1], "%)"),  y=paste0("PC2 (", pctvar[2], "%)"), shape="SampleType", color="Rothia Abundance") + theme_bw() + theme (text = element_text(size=12, color="black")) +
+  theme_boxplot() 
+
+```
+**Figure 3. Distribution of the study groups based on composition.** In this figure, we see that the distribution of the samples is affected by sample types (dental plaque, oral swab and feces). Color corresponds to Project (infection with S. oralis and S. mutans and C. albicans and S.mutans for MHK11.03.2019 and MHK10.01.2019, respectively). All the samples have been included. Vectors show the taxa present at >1% abundance that are responsible for ordination on the PCoA plot. This plot demonstrates that the animal model used in the study can show the 2 body sites (oral -right- and gut -left-) with independent microbiota, there was not cross-contamination for coprophagia as a significant issue to use rodent model for oral and/or fecal microbiome. 
+
+```{r test, include=FALSE}
+
+adonis2(dist_in ~ SampleType, data=pc_df)
+```
+
+#Bray-curtis distances
+```{r Rothia abundance, fig.height=5}
+Rothia_Swab<-pc_df %>% filter(SampleType=="Oral Swab") %>%
+ggplot(aes(x=study_group, y=`p__Actinobacteria g__Rothia`)) +
+ geom_boxplot(aes(x=study_group, y=`p__Actinobacteria g__Rothia`,fill=study_group)) +
+ labs(x= "", y= "Rothia Abundance") +
+  #geom_point(alpha=0.9, aes(x=study_group, y=`p__Actinobacteria g__Rothia`, color=study_group)) +
+  scale_fill_manual(values = cols_group) + 
+  facet_wrap(~SampleType) +
+  guides(fill=FALSE) +
+      theme_boxplot()
+
+Rothia_df <- pc_df %>% filter(SampleType=="Oral Swab")
+
+pairwise.wilcox.test(Rothia_df$`p__Actinobacteria g__Rothia`, Rothia_df$study_group)
+```
+
+```{r}
+bc_PCoA + annotation_custom(ggplotGrob(Rothia_Swab), xmin = 0.2, xmax = 0.6, ymin = -0.1, ymax =-0.5)
+```
+
+### UPGMA clustering 
+
+The following plot shows sample clustering based on `r dist_name`. We have used a method of hierarchical clustering called "average-linkage" or UPGMA. At the bottom of the dendrogram, all samples start out in their own group. Moving up the dendrogram, samples accumulate into clusters if the average (mean) distance between all samples is below the indicated value.
+
+```{r, fig.width=12, fig.height=5, echo=FALSE}
+hc = hclust(dist_in, method="average")
+plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
+```
+
+
+
+#Differential Abundance
+##Creating MetagenomeSeq Object
+```{r}
+library(metagenomeSeq)
+## Read in the OTU table (raw) with no taxonomy in it (matrix)
+
+# Model 1. Only the ones are in tb project (study_group==PBS and TB for Feces, dental plaque and Oral Swab)
+tb <- counts %>%
+   merge(ta[,c("trunc_taxon","Confidence","Feature ID")], by.x="row.names", by.y="Feature ID", all.x=T) %>%
+   dplyr::rename(Taxon = trunc_taxon) %>%
+   dplyr::rename(`Feature ID` = Row.names)
+tb <- tb[, s.tb$SampleID]
+# To check it read in the right number of samples and OTUs
+# e.g.
+dim(tb)
+
+```
+
+```{r}
+# Read in the taxonomy strings separated by taxonomy levels (dataframe)
+taxa <- t(summed_cts[, s.tb$SampleID]) %>% as.data.frame() 
+taxa$SampleID <- rownames(taxa)
+dim(taxa)
+```
+
+```{r}
+## Read in the relevant sample metadata including sample type (group)
+
+# METADATA
+meta <-s.tb[ order(match(s.tb$SampleID, taxa$Taxon)), ]
+all(rownames(meta) == colnames(taxa$SampleID))
+
+dim(meta)
+```
+
+```{r}
+## Create one MRexperiment object per model
+
+# Model 1
+phenotypeData <- AnnotatedDataFrame(meta)
+
+OTUdata <- AnnotatedDataFrame(taxa)
+# Row names need to become OTU IDs so it matches the rownames in count table; this gets used for all models
+row.names(OTUdata) <- taxa$taxa
+OTUdata
+```
+
+```{r}
+# Create model
+npsdata <- newMRexperiment(s.tb$Read_Counts, phenoData = phenotypeData, featureData = OTUdata)
+# Removed samples with NA for metadata (only a few): I did get an error when they were left in, not certain if this needs to be done
+keep1 <- !is.na(npsdata$ab_pastmonth)
+npsdata <- npsdata[,keep1]
+keep2 <- !is.na(npsdata$breastfed_cease_months)
+npsdata <- npsdata[,keep2]
+```
+
+
+```{r}
+OTU = otu_table(as.matrix(tb), taxa_are_rows = FALSE)
+TAX = tax_table(as.matrix(taxa))
+SAM = sample_data(meta)
+physeq <- merge_phyloseq(phyloseq(OTU, TAX), SAM)
+```
+
+
+
+Normalising OTU abundance:ERROR function
+```{r}
+
+#physeq <- normalise_data(physeq, norm.method = "randomsubsample")
+#physeq <- normalise_data(physeq, norm.method = "varstab", fitType = "local")
+
+```
+
+Normalising sample data
+```{r}
+physeq <- normalise_data(physeq, norm.method = "relative", norm.meta = T)
+```
+
+```{r}
+p <- plot_anova_diversity(physeq, method = c("richness", "simpson", "shannon"), 
+    grouping_column = "study_group", pValueCutoff = 0.05)
+print(p)
+```
+
