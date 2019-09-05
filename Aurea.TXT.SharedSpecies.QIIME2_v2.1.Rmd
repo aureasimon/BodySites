@@ -230,40 +230,9 @@ cols_Site <- c("Dental Plaque"= "#4743c7", "Oral Swab"= "#6ad54a", "Feces"= "#ae
 
 ```
 
-
-##Alpha-diversity
-# Taxonomic heatmap
-```{r}
-prop_cut <- 0.01
-satu_limit <- 0.4
-heatmap_fp <- "otu_heatmap.pdf"
-show.text <- sum(s$Keep) > sample_threshold
-```
-
-Each column of the heatmap represents one sample and each row represents one taxon, typically a genus. Taxa were included in the chart if the abundance in any sample exceeded `r 100*prop_cut`%. 
-
-The chart is colored white if taxa were not observed in the sample, dark blue if taxa were observed at very low abundance. This allows the reader to quickly survey presence/absence. Abundance values exceeding `r 100*satu_limit`% are colored red, indicating an extremely dominant species.
-
-`r if(show.text){paste0("Please see attached plot ", heatmap_fp, ".")}`
-
-```{r, fig.height=12, fig.width=16}
-
-props_toPlot <- summed_props[, s$SampleID]  
-grps <- c(color_by, shape_by)
-### grouped heatmap
-if (dim(s)[1] > sample_threshold) {
-  heatmap_grouped(props_toPlot, s, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit, fname = heatmap_fp)
-} else {
-  heatmap_grouped(props_toPlot, s, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit)
-}
-
-```
-
-*Figure 1. Heatmap with the bacterial composition and abundances.** This plot shows the bacterial composition of the samples. Sample arrangement corresponds to sample type (dental plaque, oral swab and  feces) and study groups (treatments). We used ASV and GreenGenes database for taxonomy classification.
-\newpage
-
-
+##Fig.4A
 ```{r DF Bacteria Proportions Melted}
+props_toPlot <- summed_props[, s$SampleID]  
 taxon_props <- props_toPlot[rowMeans(props_toPlot) > 0.01,]
 s_taxa <- t(taxon_props)[s$SampleID,] 
 
@@ -275,7 +244,7 @@ bact.prop <- melt(pc_df,id.vars=c('SubjectID', 'SampleType', 'study_group'), mea
 
 ```
 
-#Bacteria with more than 1% mean relative abundance
+##Bacteria with more than 1% mean relative abundance
 ```{r Bar Plot Taxa, fig.height=5}
 ggplot(bact.prop, aes(x=study_group, y=value)) +
  geom_col(aes(fill = variable), position="fill", stat = "identity") +
@@ -288,7 +257,7 @@ ggplot(bact.prop, aes(x=study_group, y=value)) +
 ```
 
 
-# Beta diversity
+#Beta diversity
 ## Bray-Curtis distances
 ```{r}
 dist_fp <- bc_fp
@@ -398,6 +367,7 @@ p3<- ggplot(pc_df) +
 
 ```
 
+##Fig.4B
 ```{r}
 ggpubr::ggarrange(p1, p2, p3, ncol = 3, nrow = 1, common.legend = TRUE)
 ```
