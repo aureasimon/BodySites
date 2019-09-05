@@ -1,6 +1,6 @@
 ---
 title: "Report: Body-sites microbiome in animal model"
-subtitle: "Part 1: Body-sites microbiome description"
+subtitle: "Figure 1: Body-sites microbiome description"
 author: "Aurea Simon-Soro"
 date: \today
 output:
@@ -45,7 +45,6 @@ opts_chunk$set(
 ###   R packages
 ### ================
 #This package will also help us more easily manipulate our data
-library(dplyr)
 library(magrittr)
 library(qiimer)
 library(pander)
@@ -53,20 +52,9 @@ library(pander)
 library(ape)
 #The vegan package provides tools for descriptive community ecology. It has most basic functions of diversity analysis, community ordination and dissimilarity analysis. In general, this package is used for Bray-Curtis and Jaccard analyses.
 library(vegan)
-#Graphing package used in phyloseq. To edit the default setting of a plot, you need to use functions in this package.
-library(ggplot2)
-#This package is used to calculate and plot Venn diagrams as well as heatmaps
-library(gplots)
-library(pheatmap)
-#This package will help us more easily manipulate our data, which are matrices
-library(tidyr)
 library(usedist)
-library(readr)
+library(tidyverse)
 library(tibble)
-#Linear mixed-effects models like repeated measures analysis
-library(lme4)
-#used to read in mothur-formatted files
-library(phangorn)
 #The phyloseq package seeks to address issues with multiple microbiome analysis packages by providing a set of functions that internally manage the organizing, linking, storing, and analyzing of phylogenetic sequencing data. In general, this package is used for UniFrac analyses.
 library(phyloseq)
 #Pretty Venn disgrams
@@ -86,17 +74,8 @@ library(kylemisc)
 ###   R resources
 ### ================
 source("/home/aurea/R_functions.R")
-source(file="/home/aurea/1_way_pcoa.R")
 ```
 
-
-<!-- ================================================================================================ -->
-<!--   End of Preamble                                                                                -->
-<!-- ================================================================================================ -->
-
-<!-- ================================================================================================ -->
-<!--   Beginning of Project Specific Items                                                            -->
-<!-- ================================================================================================ -->
 
 ```{r}
 ### ===========================
@@ -117,12 +96,6 @@ mapping_file_fp <- file.path(root_dir, "MF.Aurea.txt")
 feature_table_fp <- file.path(root_dir, "feature-table.tsv")
 ### taxonomic assignment 
 taxo_assignment_fp <- file.path(root_dir, "taxonomy.tsv")
-### unweighted UniFrac file path
-uu_fp <- file.path(root_dir, "uu.distance-matrix.tsv")
-### weighted UniFrac file path
-wu_fp <- file.path(root_dir, "wu.distance-matrix.tsv")
-### Jaccard Distances file path
-jc_fp <- file.path(root_dir, "jc.distance-matrix.tsv")
 ### Bray-Curtis Dissimilarities file path
 bc_fp <- file.path(root_dir, "bc.distance-matrix.tsv")
 ### faith
@@ -253,7 +226,7 @@ s <- filter(s, !is.na(HostSpecies))
 #Re-order categories
 s$study_group <- reorder(s$study_group, new.order = c("Control", "IONPs", "GOx", "CHX", "IONPs-GOx", "PBS", "NPC", "NPC.Farnesol", "Farnesol", "NPC.TB", "TB"))
 s$Water <- reorder(s$Water, new.order = c("Sucrose", "Glucose"))
-s$SampleType <- reorder(s$SampleType, new.order = c("Dental Plaque", "Oral Swab", "Feces"))
+s$SampleType <- reorder(s$SampleType, new.order = c("Oral Swab", "Dental Plaque", "Feces"))
 
 
 ```
@@ -261,9 +234,7 @@ s$SampleType <- reorder(s$SampleType, new.order = c("Dental Plaque", "Oral Swab"
 ```{r Color Palette, include=FALSE}
 cols_group <- c("Control"= "#0000C0", "IONPs"= "#C0C000", "GOx" ="#A00000", "CHX" ="#76069A", "IONPs-GOx" ="#008000", "PBS" ="#ffac57", "NPC" ="#b70037", "NPC.Farnesol" ="#00b055", "Farnesol"= "#005ac1", "NPC.TB"= "#7cc9ff", "TB"= "#c667ef")
 
-cols_Water <- c("Sucrose"= "#c0a002", "Glucose" = "#50198a")
-
-cols_Site <- c("Dental Plaque"= "#4743c7", "Oral Swab"= "#6ad54a", "Feces"= "#ae1c00")
+cols_Site <- c("Oral Swab"= "#6ad54a", "Dental Plaque"= "#4743c7", "Feces"= "#ae1c00")
 
 ```
 
@@ -306,124 +277,25 @@ ggplot(s, aes(x=Read_Counts)) +
 ```
 
 
-# Taxonomic heatmap
 
 ```{r}
-prop_cut <- 0.01
-satu_limit <- 0.4
-heatmap_fp <- "otu_heatmap.pdf"
-show.text <- sum(s$Keep) > sample_threshold
-```
-
-Each column of the heatmap represents one sample and each row represents one taxon, typically a genus. Taxa were included in the chart if the abundance in any sample exceeded `r 100*prop_cut`%. 
-
-The chart is colored white if taxa were not observed in the sample, dark blue if taxa were observed at very low abundance. This allows the reader to quickly survey presence/absence. Abundance values exceeding `r 100*satu_limit`% are colored red, indicating an extremely dominant species.
-
-`r if(show.text){paste0("Please see attached plot ", heatmap_fp, ".")}`
-
-```{r, fig.height=12, fig.width=16}
 s_toPlot <- s %>%
   filter(Keep) %>%
   filter(Water=="Sucrose")
 props_toPlot <- summed_props[, s_toPlot$SampleID]  
 grps <- c(shape_by, color_by)
-### grouped heatmap
-if (dim(s_toPlot)[1] > sample_threshold) {
-  heatmap_grouped(props_toPlot, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit, fname = heatmap_fp)
-} else {
-  heatmap_grouped(props_toPlot, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit)
-}
 
 ```
-**Figure 1. Heatmap with the bacterial composition and abundances.** This plot shows the bacterial composition of the samples. Sample arrangement corresponds to sample type (dental plaque, oral swab and  feces) and study groups (treatments). We used ASV and GreenGenes database for taxonomy classification.
-\newpage
-
-```{r DF Bacteria Proportions Melted}
-taxon_props <- props_toPlot[rowMeans(props_toPlot) > 0.01,]
-s_taxa <- t(taxon_props)[s_toPlot$SampleID,] 
-
-set.seed(2020)
-pc_df<- cbind(s_toPlot, s_taxa)
-
-#Create DF with the Bacteria in a single columns for all study_groups for all SampleTypes
-bact.prop <- melt(pc_df,id.vars=c('SubjectID', 'SampleType', 'study_group'), measure.vars=c(59:72)) 
-
-```
-
-#Bacteria with more than 1% mean relative abundance
-```{r Bar Plot Taxa, fig.height=5}
-ggplot(bact.prop, aes(x=SampleType, y=value)) +
- geom_col(aes(fill = variable), position="fill", stat = "identity") +
- labs(x= "Treatment", y= "Bacterial Abundance") +
-   ggsci::scale_fill_d3(palette = c("category20")) +
-  labs(x="", y="Relative Abundance", fill="Bacteria") +
-  theme_boxplot() + 
-  facet_grid(~SampleType, scales= "free") +
-  theme(axis.text.x=element_text(angle=-50, hjust= .1))
-```
-**Figure 2. Relative abundances of main bacterial taxa by treatment.** This plot shows the bacterial relative abundance of the different sample types collected (dental plaque, oral swab and feces). Also, it is separated by treatment within sample type. 
-\newpage
-
-
-# Alpha Diversity
-
-Alpha diversity was assessd by the expected number of observed OTUs (out of rarefying sample size of `r richness_subsample_size`), Shannon index, and Faith’s phylogenetic diversity.
-
-## Number of observed ASV
-
-```{r, fig.height=2.5}
-alpha_measure <- "richness"
-s_toPlot %>% filter(Keep) %>%
-  ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)))) +
-  geom_boxplot() +
-  labs(y="Richness", x=color_by, color=color_by)  +
-  geom_beeswarm(alpha=0.5, aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
-  scale_color_manual(values = cols_Site) + 
-  guides(color=FALSE) +
-      theme_boxplot()
-pairwise.wilcox.test(s_toPlot$richness, s_toPlot$SampleType, p.adjust.method = "bonferroni")
-```
-
-
-## Shannon Index
-```{r, fig.height=2.5}
-alpha_measure <- "shannon"
-s_toPlot %>% filter(Keep) %>%
-  ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)))) +
-  geom_boxplot() +
-  labs(y="Shannon", x=color_by, color=color_by)  +
-  geom_beeswarm(alpha=0.5, aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
-  scale_color_manual(values = cols_Site) + 
-  guides(color=FALSE) +
-      theme_boxplot()
-
-pairwise.wilcox.test(s_toPlot$shannon, s_toPlot$SampleType, p.adjust.method = "bonferroni")
-```
-
-## Faith’s Phylogenetic Diversity
-
-```{r, fig.height=2.5}
-alpha_measure <- "faith_pd"
-s_toPlot %>% filter(Keep) %>%
-  ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)))) +
-  geom_boxplot() +
-  labs(y="PD", x=color_by, color=color_by)  +
-  geom_beeswarm(alpha=0.5, aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
-  scale_color_manual(values = cols_Site) + 
-  guides(color=FALSE) +
-      theme_boxplot()
-pairwise.wilcox.test(s_toPlot$faith_pd, s_toPlot$SampleType, p.adjust.method = "bonferroni")
-```
-**Figure 2. The alpha-diversity of the study groups.** The plots represent the taxonomical differences between groups; each point is a sample; colors correspond to treatment groups. The graphs are divided into sample type corresponding to dental plaque, oral swab and feces. __Richness__: Represent the number of amplicon sequence variants (or bacterial species-like). __Shannon__:Distribution of species per sample. High diversity index means high bacterial diversity and with equal distribution of each species, whereas lower index implies the dominance of one or a few species. __Faith.PD__:Phylogenetic diversity (“PD”) is a measure of biodiversity, based on phylogeny (the tree of life). High Faith_pd means that the sample contains bugs from different linages (Firmicutes, Bacteroidetes...), and low number means different species from the same genera (e.g. Streptococcus species)
 
 # Beta diversity
-## Weighted UniFrac distances
+## Bray-Curtis  distances
 ```{r}
 dist_fp <- bc_fp
 dist_name <- "Bray-Curtis Unifrac distances"
 ```
 The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
 ```{r Obtain the proportiona and axes for the amin genera}
+taxon_props <- props_toPlot[rowMeans(props_toPlot) > 0.01,]
 # Make sure the distance matrix is in the same order as the sample table
 dist_in <- usedist::dist_subset(read_qiime_distmat(dist_fp), s_toPlot$SampleID)
 # Here is the actual principal coordinates analysis
@@ -470,8 +342,8 @@ pctvar <- round(pc$values$Relative_eig * 100)
 
 ```
 
-
-##PCoA by Body Sites
+##Figure 1A
+###PCoA by Body Sites
 ```{r wu PCoA PLOT}
 library(ggrepel)
 
@@ -484,20 +356,47 @@ ggplot(pc_df) +
   theme_boxplot() 
 
 ```
-**Figure 3. Distribution of the study groups based on composition.** In this figure, we see that the distribution of the samples is affected by sample types (dental plaque, oral swab and feces). Color corresponds to Project (infection with S. oralis and S. mutans and C. albicans and S.mutans for MHK11.03.2019 and MHK10.01.2019, respectively). All the samples have been included. Vectors show the taxa present at >1% abundance that are responsible for ordination on the PCoA plot. This plot demonstrates that the animal model used in the study can show the 2 body sites (oral -right- and gut -left-) with independent microbiota, there was not cross-contamination for coprophagia as a significant issue to use rodent model for oral and/or fecal microbiome. 
+
+
+##Figure 1B
+###Alpha Diversity: Number of observed ASV
+
+```{r, fig.height=2.5}
+alpha_measure <- "richness"
+s_toPlot %>% filter(Keep) %>%
+  ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)))) +
+  geom_boxplot() +
+  labs(y="Richness", x=color_by, color=color_by)  +
+  geom_beeswarm(alpha=0.5, aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
+  scale_color_manual(values = cols_Site) + 
+  guides(color=FALSE) +
+      theme_boxplot()
+pairwise.wilcox.test(s_toPlot$richness, s_toPlot$SampleType, p.adjust.method = "bonferroni")
+```
+
 
 ```{r test, include=FALSE}
+source("/home/aurea/Function.Pairwise.Adonis.dm.R")
 
-adonis2(dist_in ~ SampleType, data=pc_df)
+.SampleType.Rat<- pairwise.adonis.dm(dist_in, s_toPlot$SampleType)
+
+#Create dataframe with the numbers obtained for Feces F-statistics
+#Dataframe for all F-statistics
+library(reshape)
+list_df <- list(.SampleType.Rat)
+Fstats.df <- merge_all(list_df) %>%
+filter(!p.adjusted > 0.05)
 ```
+##Fig 1D. Rat and human body-site differences
+```{r}
 
+ggplot() + 
+  geom_col(Fstats.df, mapping =aes(x=pairs, y=R2, fill=pairs)) + 
+  coord_flip() +
+  #facet_grid (~study_group, scales="free", labeller = label_parsed) +   
+  theme_boxplot() +
+  labs(x="", y=parse(text='R^2')) +
+  theme(legend.position = "none") + 
+ ggsci::scale_fill_simpsons()
 
-### UPGMA clustering 
-
-The following plot shows sample clustering based on `r dist_name`. We have used a method of hierarchical clustering called "average-linkage" or UPGMA. At the bottom of the dendrogram, all samples start out in their own group. Moving up the dendrogram, samples accumulate into clusters if the average (mean) distance between all samples is below the indicated value.
-
-```{r, fig.width=12, fig.height=5, echo=FALSE}
-hc = hclust(dist_in, method="average")
-plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
 ```
-
