@@ -107,12 +107,36 @@ bc_fp <- file.path(root_dir, "bc.distance-matrix.tsv")
 faith_fp <- file.path(root_dir, "alpha-diversity.tsv")
 ```
 
-```{r, warning=F}
+```{r}
+study_group_levels <- c(
+  "Control", "IONPs", "GOx", "CHX",
+  "IONPs-GOx", "PBS", "NPC", "NPC.Farnesol",
+  "Farnesol", "NPC.TB", "TB")
+water_levels <- c("Sucrose", "Glucose")
+sample_type_levels <- c("Oral Swab", "Dental Plaque", "Feces")
+```
+
+
+```{r, warning=F, message=F}
 ### ===========================
 ###   read in data
 ### ===========================
 ### read mapping file
-s <- read_qiime_mapping_file(mapping_file_fp)
+s <- read_tsv(mapping_file_fp) %>%
+  rename(SampleID = "#SampleID") %>%
+
+  # Fix sequencing control samples
+  mutate(SampleType = if_else(
+    (study_group %in% "Contamination Control"), "Blank oral swab", SampleType)) %>%
+  mutate(is_seq_control = is.na(HostSpecies)) %>%
+  mutate(study_color = na_if(study_color, "Contamination Control")) %>%
+  mutate(study_group = na_if(study_group, "Contamination Control")) %>%
+
+  # Assign levels
+  mutate(study_group = fct_relevel(study_group, study_group_levels)) %>%
+  mutate(Water = fct_relevel(Water, water_levels)) %>%
+  mutate(SampleType = fct_relevel(SampleType, sample_type_levels))
+
 ### check for the column names to assign color_by and shape_by for pcoa plots
 color_by <- NULL
 shape_by <- NULL
@@ -222,17 +246,6 @@ pander(table(s[, color_by], factor(ifelse(s$Keep, "Keep", "Discard"))))
 
 #Subset samples geneBlock_DNA
 s <- filter(s, !is.na(HostSpecies))
-
-```
-
-
-```{r arrange_and_counts, include=FALSE}
-
-#Re-order categories
-s$study_group <- reorder(s$study_group, new.order = c("Control", "IONPs", "GOx", "CHX", "IONPs-GOx", "PBS", "NPC", "NPC.Farnesol", "Farnesol", "NPC.TB", "TB"))
-s$Water <- reorder(s$Water, new.order = c("Sucrose", "Glucose"))
-s$SampleType <- reorder(s$SampleType, new.order = c("Oral Swab", "Dental Plaque", "Feces"))
-
 
 ```
 
