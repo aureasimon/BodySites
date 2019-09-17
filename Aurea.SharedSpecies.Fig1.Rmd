@@ -73,7 +73,7 @@ library(kylemisc)
 ### ================
 ###   R resources
 ### ================
-source("/home/aurea/R_functions.R")
+source("R_functions.R")
 ```
 
 
@@ -89,7 +89,12 @@ richness_subsample_size <- 1000
 sample_threshold <- 100
 ### setwd
 #fill in your project dir
-root_dir = "/home/aurea/Koo/Shared.Species.BODYSITE/Input.Files"
+# From Kyle:
+# To keep the project self-contained, place the data inside the project
+# directory and use relative paths.  Here, I put the files in inst/extdata.
+# If this project ever turns into an R package, you can keep the data files
+# right where they are.
+root_dir <- "inst/extdata"
 ### mapping file path
 mapping_file_fp <- file.path(root_dir, "MF.Aurea.txt")
 ### otu table file path
@@ -107,7 +112,7 @@ faith_fp <- file.path(root_dir, "alpha-diversity.tsv")
 ###   read in data
 ### ===========================
 ### read mapping file
-s <- read_qiime_mapping_file(mapping_file_fp) 
+s <- read_qiime_mapping_file(mapping_file_fp)
 ### check for the column names to assign color_by and shape_by for pcoa plots
 color_by <- NULL
 shape_by <- NULL
