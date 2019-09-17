@@ -267,7 +267,7 @@ s <- s %>%
   merge(faith, by="SampleID", all.x=T)
 ```
 
-# Introduction
+# Overview
 This report is based on the results of 16S sequencing performed on MHK11.03.2019 for Yue's Project and MHK10.01.2019 for Tatsuro's Project.
 
 Different treatments were performed in the 2 projects. Also, infection diferred:
@@ -289,7 +289,7 @@ ggplot(s, aes(x=Read_Counts)) +
     ylab("Number of samples")
 ```
 
-
+# Compare sites
 
 ```{r}
 s_toPlot <- s %>%
@@ -299,8 +299,8 @@ props_toPlot <- summed_props[, s_toPlot$SampleID]
 
 ```
 
-# Beta diversity
-## Bray-Curtis  distances
+## Beta diversity
+
 ```{r}
 dist_fp <- bc_fp
 dist_name <- "Bray-Curtis Unifrac distances"
@@ -354,8 +354,8 @@ pctvar <- round(pc$values$Relative_eig * 100)
 
 ```
 
-##Figure 1A
-###PCoA by Body Sites
+### Figure 1A
+
 ```{r wu PCoA PLOT}
 pc_df %>%
   ggplot(aes(x=Axis.1, y=Axis.2)) +
@@ -367,7 +367,7 @@ pc_df %>%
   geom_text_repel(
     aes(label=Taxon_name), fontface = 'italic',
     data=taxon_centers_of_gravity, segment.size=0) +
-  stat_ellipse(aes(shape=SampleType))+
+  stat_ellipse(aes(group=SampleType)) +
   labs(
     x=paste0("PC1 (", pctvar[1], "%)"),
     y=paste0("PC2 (", pctvar[2], "%)"),
@@ -375,9 +375,28 @@ pc_df %>%
   theme_boxplot()
 ```
 
+```{r test, include=FALSE}
+source("Function.Pairwise.Adonis.dm.R")
 
-##Figure 1B
-###Alpha Diversity: Number of observed ASV
+fstats_df <- pairwise.adonis.dm(dist_in, s_toPlot$SampleType)
+```
+
+### Fig 1D
+
+Rat and human body-site differences
+
+```{r}
+fstats_df %>%
+  ggplot() +
+  geom_col(aes(x=pairs, y=R2, fill=pairs)) +
+  coord_flip() +
+  theme_boxplot() +
+  labs(x="", y=parse(text='R^2')) +
+  theme(legend.position = "none") +
+  ggsci::scale_fill_simpsons()
+```
+
+## Alpha Diversity
 
 ```{r, fig.height=2.5}
 s_toPlot %>% filter(Keep) %>%
@@ -394,19 +413,4 @@ pairwise.wilcox.test(s_toPlot$richness, s_toPlot$SampleType, p.adjust.method = "
 ```
 
 
-```{r test, include=FALSE}
-source("Function.Pairwise.Adonis.dm.R")
 
-fstats_df <- pairwise.adonis.dm(dist_in, s_toPlot$SampleType)
-```
-##Fig 1D. Rat and human body-site differences
-```{r}
-fstats_df %>%
-  ggplot() +
-  geom_col(aes(x=pairs, y=R2, fill=pairs)) +
-  coord_flip() +
-  theme_boxplot() +
-  labs(x="", y=parse(text='R^2')) +
-  theme(legend.position = "none") +
-  ggsci::scale_fill_simpsons()
-```
