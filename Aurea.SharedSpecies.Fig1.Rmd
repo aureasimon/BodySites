@@ -394,27 +394,18 @@ pairwise.wilcox.test(s_toPlot$richness, s_toPlot$SampleType, p.adjust.method = "
 
 
 ```{r test, include=FALSE}
-source("/home/aurea/Function.Pairwise.Adonis.dm.R")
+source("Function.Pairwise.Adonis.dm.R")
 
-.SampleType.Rat<- pairwise.adonis.dm(dist_in, s_toPlot$SampleType)
-
-#Create dataframe with the numbers obtained for Feces F-statistics
-#Dataframe for all F-statistics
-library(reshape)
-list_df <- list(.SampleType.Rat)
-Fstats.df <- merge_all(list_df) %>%
-filter(!p.adjusted > 0.05)
+fstats_df <- pairwise.adonis.dm(dist_in, s_toPlot$SampleType)
 ```
 ##Fig 1D. Rat and human body-site differences
 ```{r}
-
-ggplot() + 
-  geom_col(Fstats.df, mapping =aes(x=pairs, y=R2, fill=pairs)) + 
+fstats_df %>%
+  ggplot() +
+  geom_col(aes(x=pairs, y=R2, fill=pairs)) +
   coord_flip() +
-  #facet_grid (~study_group, scales="free", labeller = label_parsed) +   
   theme_boxplot() +
   labs(x="", y=parse(text='R^2')) +
-  theme(legend.position = "none") + 
- ggsci::scale_fill_simpsons()
-
+  theme(legend.position = "none") +
+  ggsci::scale_fill_simpsons()
 ```
