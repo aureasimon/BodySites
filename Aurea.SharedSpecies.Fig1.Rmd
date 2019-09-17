@@ -65,6 +65,7 @@ library(ggthemes)
 library(reshape2)
 library(kylemisc)
 library(ggrepel)
+library(ggsci)
 ```
 
 
@@ -377,7 +378,6 @@ pc_df %>%
 
 ```{r test, include=FALSE}
 source("Function.Pairwise.Adonis.dm.R")
-
 fstats_df <- pairwise.adonis.dm(dist_in, s_toPlot$SampleType)
 ```
 
@@ -389,11 +389,11 @@ Rat and human body-site differences
 fstats_df %>%
   ggplot() +
   geom_col(aes(x=pairs, y=R2, fill=pairs)) +
+  scale_fill_simpsons(guide=FALSE) +
+  scale_y_continuous(limits = c(0, 1)) +
   coord_flip() +
-  theme_boxplot() +
   labs(x="", y=parse(text='R^2')) +
-  theme(legend.position = "none") +
-  ggsci::scale_fill_simpsons()
+  theme_boxplot()
 ```
 
 ## Alpha Diversity
