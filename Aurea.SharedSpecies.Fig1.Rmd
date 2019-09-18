@@ -138,76 +138,64 @@ s <- read_tsv(mapping_file_fp) %>%
   mutate(study_group = fct_relevel(study_group, study_group_levels)) %>%
   mutate(Water = fct_relevel(Water, water_levels)) %>%
   mutate(SampleType = fct_relevel(SampleType, sample_type_levels))
-
-
-### read otu table
-counts <- readr::read_delim(feature_table_fp, skip=1, delim="\t") %>%
-  column_to_rownames(var = "#OTU ID") %>%
-  as.matrix()
-### get read counts
-read_counts <- colSums(counts) %>% 
-  as.data.frame() %>%
-  setNames(c("Read_Counts")) %>%
-  rownames_to_column(var="SampleID")
-### find the samples to keep
-s <- merge(s, read_counts, by="SampleID", all.x=T) %>%
-  mutate(Keep = Read_Counts > min_reads) %>%
-  mutate(isControl = grepl("geneblock|freewater|extract", SampleID, ignore.case = TRUE))
-#trun_taxon perl expression is to get rid of trailing "; s__" since it doesn't add any new information
-### taxonomic assignment
-ta <- read_delim(file=taxo_assignment_fp, delim="\t") %>%
-  mutate(trunc_taxon = sub('(; [kpcofgs]__)+$', "", Taxon, perl=T)) %>%
-  arrange(order(match(rownames(counts), `Feature ID`)))
-### check if the order of the assignments and the order of feature table is the same
-if (!all(rownames(counts) == ta$`Feature ID`)) {
-  stop (simpleError("The order of the features in the table and classifications don't match"))
-}
-adf <- split_assignments(ta$trunc_taxon) 
-### remove contamination
-is_mitochondrial <- grepl("mitochondria", adf$Family)
-is_chloroplast <- grepl("Chloroplast", adf$Class)
-is_unassigned <- grepl("Unassigned", adf$Kingdom)
-is_archaea <- grepl("Archaea", adf$Kingdom)
-is_contam <- is_mitochondrial | is_chloroplast | is_unassigned ### Archaea kept to check positive control samples
-counts <- counts[!is_contam,]
-adf <- adf[!is_contam,]
-ta <- ta[!is_contam,]
-rm(is_contam, is_mitochondrial, is_chloroplast, is_unassigned, is_archaea)
-a <- simplify_assignments(adf, rank1="Phylum", rank2="Genus")
-names(a) <- ta$`Feature ID`
-summed_cts <- rowsum(counts, a) 
-summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/")
-#if we want all the otus
- all_otus <- counts %>%
-   merge(ta[,c("Feature ID","Confidence","trunc_taxon")], by.x="row.names", by.y="Feature ID", all.x=T) %>%
-   dplyr::rename(Taxon = trunc_taxon) %>%
-   dplyr::rename(`Feature ID` = Row.names)
-# 
-# write.csv(x = all_otus, file = "all_otus.csv", row.names = F)
 ```
 
+
+```{r message=FALSE}
+### read otu table
+assignments <- read_tsv(file=taxo_assignment_fp) %>%
+  rename(Lineage = Taxon, OtuID = `Feature ID`) %>%
+  do(bind_cols(., split_assignments(.$Lineage))) %>%
+  mutate_at(taxonomic_ranks, str_remove, "[kpcofgs]__") %>%
+  mutate_at(taxonomic_ranks, na_if, "") %>%
+  mutate(Assignment = simplify_assignments(.[taxonomic_ranks]))
+
+otu_counts <- readr::read_tsv(feature_table_fp, skip=1) %>%
+  rename(OtuID = "#OTU ID") %>%
+  gather(SampleID, Counts, -OtuID) %>%
+  left_join(assignments, by="OtuID") %>%
+  filter(!str_detect(Family, "mitochondria")) %>%
+  filter(!str_detect(Class, "Chloroplast")) %>%
+  filter(!str_detect(Kingdom, "Unassigned")) %>%
+  filter(!str_detect(Kingdom, "Archaea")) %>%
+  group_by(SampleID) %>%
+  filter(sum(Counts) > 0)
+
+if (!all(otu_counts$OtuID %in% assignments$OtuID)) {
+  stop("Some OTUs not in taxonomic assignments table")
+}
+
+assignment_counts <- otu_counts %>%
+  group_by(SampleID, Assignment) %>%
+  summarize(Counts = sum(Counts)) %>%
+  ungroup() %>%
+  group_by(SampleID) %>%
+  mutate(Proportion = Counts / sum(Counts)) %>%
+  ungroup()
+
+read_counts <- otu_counts %>%
+  group_by(SampleID) %>%
+  summarize(NumReads = sum(Counts))
+```
+
+No reads after contamination/archaea removal.
 
 ```{r, Samples error check 1}
 ### ===========================
 ###   check for missing samples
 ### ===========================
 ### possible issue 1: Samples found in the sample sheet but not in the feature table (0 reads)
-s_missing <- s %>%
-  filter(!SampleID %in% colnames(counts)) %>%
-  select(SampleID, SampleType, isControl)
-if (any(!s_missing$isControl)) {
-  pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but not in the feature table.")
-}
+s %>%
+  filter(!(SampleID %in% read_counts$SampleID)) %>%
+  select(SampleID, SampleType)
 ```
 
+Samples in feature table but not sample info table.
 
 ```{r, Samples error check 2}
 ### possible issue 2: Samples found in the feature table but not in the sample sheet. There must be an error!
-in_counts_not_in_s <- setdiff(colnames(counts), s$SampleID)
-if (length(in_counts_not_in_s) > 0) {
-  stop (simpleError("These SampleID(s) are in the feature table, but not found in the sample sheet.", paste(in_counts_not_in_s, collapse=" ")))
-}
-s[s$SampleID %in% s_missing$SampleID, "Keep"] <- FALSE
+read_counts %>%
+  filter(!(SampleID %in% s$SampleID))
 ```
 
 
@@ -235,38 +223,42 @@ theme_figures <- function () {theme_kyle() +
 ```{r general quantification, include=FALSE}
 ## Whole samples that are above the `r min_reads` read count threshold
 s %>%
-  mutate(KeepLabel = if_else(Keep, "Keep", "Discard")) %>%
-  count(SampleType, KeepLabel) %>%
-  spread(KeepLabel, n) %>%
+  left_join(read_counts, by="SampleID") %>%
+  mutate(NumReads = replace_na(NumReads, 0)) %>%
+  mutate(Keep = if_else(NumReads > min_reads, "Keep", "Discard")) %>%
+  count(SampleType, Keep) %>%
+  spread(Keep, n) %>%
   pander()
-
-#Subset samples geneBlock_DNA
-s <- filter(s, !is.na(HostSpecies))
-
 ```
 
 ```{r Color Palette, include=FALSE}
 cols_group <- c("Control"= "#0000C0", "IONPs"= "#C0C000", "GOx" ="#A00000", "CHX" ="#76069A", "IONPs-GOx" ="#008000", "PBS" ="#ffac57", "NPC" ="#b70037", "NPC.Farnesol" ="#00b055", "Farnesol"= "#005ac1", "NPC.TB"= "#7cc9ff", "TB"= "#c667ef")
 
-cols_Site <- c("Oral Swab"= "#6ad54a", "Dental Plaque"= "#4743c7", "Feces"= "#ae1c00")
+cols_Site <- c("#6ad54a", "#4743c7", "#ae1c00")
 
 ```
 
 
-```{r, warning=F}
+```{r}
 ### ===========================
 ###   calculate / read in alpha diversity
 ### ===========================
-faith <- read.delim(file=faith_fp, stringsAsFactors = F) %>%
-  dplyr::rename(SampleID=X)
-# dplyr::filter(!isControl) %>%
-s <- s %>%
-  merge(vegan::diversity(t(counts)), by.x="SampleID", by.y="row.names", all.x=T) %>%
-  dplyr::rename(shannon = y) %>%
-  merge(rarefy(t(counts), richness_subsample_size), by.x="SampleID", by.y="row.names", all.x=T) %>%
-  dplyr::rename(richness = y) %>%
-  merge(faith, by="SampleID", all.x=T)
+faith_df <- read_tsv(file=faith_fp) %>%
+  rename(SampleID=X1)
+
+alpha_df <- otu_counts %>%
+  group_by(SampleID) %>%
+  summarize(
+    Shannon = diversity(Counts),
+    Richness = rarefy(Counts, 1000)) %>%
+  left_join(faith_df, by="SampleID")
 ```
+
+```{r}
+# read in beta diversity
+bc <- read_qiime_distmat(bc_fp)
+```
+
 
 # Overview
 This report is based on the results of 16S sequencing performed on MHK11.03.2019 for Yue's Project and MHK10.01.2019 for Tatsuro's Project.
@@ -281,23 +273,23 @@ Different treatments were performed in the 2 projects. Also, infection diferred:
 ## Histogram of high quality paired reads per sample
 #The black dashed vertical line shows the minimum number of reads (`r min_reads`) for analysis. Control samples, if any, were included in the histogram.
 
-ggplot(s, aes(x=Read_Counts)) +
-    geom_histogram(aes(fill=SampleType), binwidth=1000) +
-    geom_vline(xintercept = min_reads, color="black", linetype="dashed") +
-    theme_classic() +
-    theme_bw() + 
-    xlab("Number of reads in sample") +
-    ylab("Number of samples")
+s %>%
+  left_join(read_counts, by="SampleID") %>%
+  ggplot(aes(x=NumReads)) +
+  geom_histogram(aes(fill=SampleType), binwidth=1000) +
+  geom_vline(xintercept = min_reads, color="black", linetype="dashed") +
+  scale_fill_d3() +
+  labs(x="Number of reads", y="Number of samples") +
+  theme_bw()
 ```
 
 # Compare sites
 
 ```{r}
-s_toPlot <- s %>%
-  filter(Keep) %>%
+s_sites <- s %>%
+  left_join(read_counts, by="SampleID") %>%
+  filter(NumReads > min_reads) %>%
   filter(Water=="Sucrose")
-props_toPlot <- summed_props[, s_toPlot$SampleID]  
-
 ```
 
 ## Beta diversity
@@ -308,77 +300,66 @@ dist_name <- "Bray-Curtis Unifrac distances"
 ```
 The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
 ```{r Obtain the proportiona and axes for the amin genera}
-taxon_props <- props_toPlot[rowMeans(props_toPlot) > 0.01,]
-# Make sure the distance matrix is in the same order as the sample table
-dist_in <- usedist::dist_subset(read_qiime_distmat(dist_fp), s_toPlot$SampleID)
+bc_sites <- dist_subset(bc, s_sites$SampleID)
+
 # Here is the actual principal coordinates analysis
-pc <- pcoa(dist_in)
-# Get the first 3 principal coordinates as a matrix,
-#   make sure rows are in the same order as sample table
-s_coords <- pc$vectors[s_toPlot$SampleID,1:3]
-# Get the taxon proportions as a matrix,
-#   flip so that samples are in the rows,
-#   again make sure rows are in the correct order
-s_taxa <- t(taxon_props)[s_toPlot$SampleID,]
+pc <- pcoa(bc_sites)
 
-# Stick the coordinates and taxon proportions onto
-#   the right side of the sample table
-pc_df <- cbind(s_toPlot, s_coords, s_taxa)
-
-```
-
-
-```{r PCoA arrow}
-# Make weights for each taxon
-# Weights should sum to 1, divide by total for each column
-taxon_weights <- apply(s_taxa, 2, function (x) x / sum(x))
-# Matrix multiplication seems tricky here,
-#   but we need to multiply sample weights by sample coordinates
-#   and sum to get the average. We need to do this for each coordinate
-#   axis and each taxon -- that's what matrix multiplication does.
-#   You can try it by hand for one coordinate axis and taxon and
-#   check that the answer is correct.
-taxon_centers_of_gravity <- t(taxon_weights) %*% s_coords
-# Convert to data frame
-taxon_centers_of_gravity <- as.data.frame(taxon_centers_of_gravity)
-# Dedicate one column to hold the taxon name
-taxon_centers_of_gravity$Taxon <- rownames(taxon_centers_of_gravity)
-
-# Splits the taxon name column by the 'space' into "Taxon" and "Taxon_name"
-taxon_centers_of_gravity <- separate(taxon_centers_of_gravity, Taxon, sep=" ", c("Taxon","Taxon_name"))
-# Removes the g__ or f__ in the Taxon_name column
-taxon_centers_of_gravity$Taxon_name <- substring(taxon_centers_of_gravity$Taxon_name, 4)
-
-#Percentaje of PC axes
-pc <- pcoa(dist_in)
 pctvar <- round(pc$values$Relative_eig * 100)
 
+# Principal coordinate positions of samples
+s_coords <- pc$vectors %>%
+  as.data.frame() %>%
+  rownames_to_column("SampleID") %>%
+  select(1:4)
+
+# Principal coordinate positions of taxa
+taxa_coords <- assignment_counts %>%
+  # Filter to include samples in this analysis
+  right_join(s_coords, by="SampleID") %>%
+  # Filter to keep high-abundance taxa
+  group_by(Assignment) %>%
+  filter(mean(Proportion) > 0.02) %>%
+  ungroup() %>%
+  # Weighted mean position along each axis
+  gather(Axis, SamplePosition, starts_with("Axis")) %>%
+  group_by(Assignment, Axis) %>%
+  summarize(
+    TaxonPosition = weighted.mean(SamplePosition, Proportion),
+    MeanProp = mean(Proportion)) %>%
+  ungroup() %>%
+  spread(Axis, TaxonPosition) %>%
+  # Make the labels nicer
+  mutate(TaxonLabel = str_remove(Assignment, "^\\w+ "))
 ```
 
 ### Figure 1A
 
 ```{r wu PCoA PLOT}
-pc_df %>%
+s_sites %>%
+  left_join(s_coords, by="SampleID") %>%
   ggplot(aes(x=Axis.1, y=Axis.2)) +
   geom_point(
     aes(color=SampleType),
     shape= 21, fill="#ebcdc1",
-    size = 2.5, stroke=2, alpha=0.8) +
+    size = 2.2, stroke=2, alpha=0.7) +
   scale_color_manual(values = cols_Site) +
   geom_text_repel(
-    aes(label=Taxon_name), fontface = 'italic',
-    data=taxon_centers_of_gravity, segment.size=0) +
+    aes(label=TaxonLabel), fontface = 'italic',
+    data=taxa_coords, segment.size=0) +
   stat_ellipse(aes(group=SampleType)) +
   labs(
     x=paste0("PC1 (", pctvar[1], "%)"),
     y=paste0("PC2 (", pctvar[2], "%)"),
     color="") +
   theme_boxplot()
+ggsave("inst/figures/sites_braycurtis.pdf", width=6, height=4, useDingbats=F)
 ```
 
 ```{r test, include=FALSE}
 source("Function.Pairwise.Adonis.dm.R")
-fstats_df <- pairwise.adonis.dm(dist_in, s_toPlot$SampleType)
+fstats_df <- pairwise.adonis.dm(bc_sites, s_sites$SampleType)
+fstats_df
 ```
 
 ### Fig 1D
@@ -394,23 +375,68 @@ fstats_df %>%
   coord_flip() +
   labs(x="", y=parse(text='R^2')) +
   theme_boxplot()
+ggsave("inst/figures/sites_r2.pdf", width=5, height=2)
 ```
 
 ## Alpha Diversity
 
-```{r, fig.height=2.5}
-s_toPlot %>% filter(Keep) %>%
-  ggplot(aes(x=SampleType, y=richness)) +
-  geom_boxplot() +
+```{r, fig.height=3, fig.width=4}
+s_sites %>%
+  mutate(SampleType = str_replace(SampleType, " ", "\n")) %>%
+  mutate(SampleType = fct_relevel(SampleType, "Oral\nSwab")) %>%
+  left_join(alpha_df, by="SampleID") %>%
+  ggplot(aes(x=SampleType, y=Richness)) +
+  geom_boxplot(outlier.shape = NA) +
   geom_beeswarm(aes(color=SampleType), alpha=0.5) +
   scale_color_manual(values = cols_Site, guide=FALSE) +
   labs(x="", y="Richness\n(1k reads per sample)") +
   theme_boxplot()
+ggsave("inst/figures/sites_richness.pdf", width=4, height=3, useDingbats=F)
 ```
 
 ```{r}
-pairwise.wilcox.test(s_toPlot$richness, s_toPlot$SampleType, p.adjust.method = "bonferroni")
+s_sites %>%
+  left_join(alpha_df, by="SampleID") %>%
+  with(pairwise.wilcox.test(
+    Richness, SampleType, p.adjust.method = "bonferroni"))
+```
+
+# TB vs PBS
+
+```{r}
+s_tb <- s %>%
+  left_join(read_counts, by="SampleID") %>%
+  filter(NumReads > min_reads) %>%
+  filter(Water %in% "Sucrose", study_group %in% c("PBS", "TB"))
 ```
 
 
+```{r}
+tb_taxa <- assignment_counts %>%
+  filter(SampleID %in% s_tb$SampleID) %>%
+  mutate(Assignment = fct_lump(Assignment, n=10, w=Proportion)) %>%
+  # Sum in each sample
+  group_by(SampleID, Assignment) %>%
+  summarize(Proportion = sum(Proportion)) %>%
+  ungroup() %>%
+  # Average within groups
+  left_join(s_tb, by="SampleID") %>%
+  group_by(SampleType, study_group, Assignment) %>%
+  summarize(Proportion = mean(Proportion)) %>%
+  ungroup()
+```
+
+##Bacteria with more than 1% mean relative abundance
+```{r Bar Plot Taxa, fig.height=5}
+tb_taxa %>%
+  ggplot(aes(x=study_group, y=Proportion)) +
+  geom_col(aes(fill = Assignment)) +
+  labs(x= "Treatment", y= "Bacterial Abundance") +
+  ggsci::scale_fill_d3(palette = c("category20")) +
+  labs(x="", y="Relative Abundance", fill="Bacteria") +
+  theme_boxplot() +
+  facet_grid(~SampleType, scales= "free") +
+  theme(axis.text.x=element_text(angle=-50, hjust= .1))
+ggsave("inst/figures/tb_stackedbars.pdf", width=8, height=5)
+```
 
