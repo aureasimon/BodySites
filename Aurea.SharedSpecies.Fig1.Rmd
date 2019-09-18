@@ -335,7 +335,7 @@ taxa_coords <- assignment_counts %>%
 
 ### Figure 1A
 
-```{r wu PCoA PLOT}
+```{r fig.width=7, fig.height=5}
 s_sites %>%
   left_join(s_coords, by="SampleID") %>%
   ggplot(aes(x=Axis.1, y=Axis.2)) +
@@ -353,7 +353,7 @@ s_sites %>%
     y=paste0("PC2 (", pctvar[2], "%)"),
     color="") +
   theme_boxplot()
-ggsave("inst/figures/sites_braycurtis.pdf", width=6, height=4, useDingbats=F)
+ggsave("inst/figures/sites_braycurtis.pdf", width=7, height=5, useDingbats=F)
 ```
 
 ```{r test, include=FALSE}
@@ -366,7 +366,7 @@ fstats_df
 
 Rat and human body-site differences
 
-```{r}
+```{r fig.height=2, fig.width=5}
 fstats_df %>%
   ggplot() +
   geom_col(aes(x=pairs, y=R2, fill=pairs)) +
@@ -471,11 +471,12 @@ make_body_site_pcoa <- function (sample_type) {
 }
 ```
 
-```{r}
+```{r fig.height=3, fig.width=8}
 p1 <- make_body_site_pcoa("Oral Swab")
 p2 <- make_body_site_pcoa("Dental Plaque")
 p3 <- make_body_site_pcoa("Feces")
 ggpubr::ggarrange(p1, p2, p3, ncol = 3, nrow = 1, common.legend = TRUE)
+ggsave("inst/figures/tb_braycurtis.pdf", width=8, height=3, useDingbats=F)
 ```
 
 ```{r}
