@@ -1,0 +1,56 @@
+---
+title: "Fold Change Estimate"
+author: "Aurea Simon-Soro"
+date: \today
+output:
+  pdf_document: default
+  html_document: default
+---
+
+---
+To run after the main Rmd file: Aurea.SharedSpecies.Fig1.Rmd
+
+```{r}
+library(nlme)
+tidy_lmer <- function(lmer_test) {
+  mod <- summary(lmer_test)
+  data.frame(term  = rownames(mod$tTable), mod$tTable, row.names=NULL)
+}
+```
+
+```{r}
+#NOTE to Kyle: Please check the formula at line 20-21
+
+form1 # The formula you would like to test. One example is "props_logit ~ study_group"
+rep_mes_form # This is the repeated measures formula. Most likely it will be something like "~1|SubjectID"
+
+summaries_df <- tb_taxa %>%
+    mutate(props_logit = log(Proportion/(1-Proportion))) %>%
+    group_by(Assignment, SampleType) %>%
+    do(tidy_lmer(nlme::lme(as.formula(props_logit ~ study_group), data=., na.action=na.omit))) %>%
+    ungroup() %>%
+    filter(term != '(Intercept)') %>%
+    group_by(term) %>%
+    mutate(fdr = p.adjust(p.value, method="BH")) %>%
+    ungroup() 
+
+```
+
+```{r}
+#To make the plot
+summaries_df %>%
+  filter(fdr < 0.05) %>%
+  filter(term == "the term you want to plot") %>% ### change this to the term you want to plot
+  ggplot(aes(x=Taxa, y=estimate, ymin=estimate-std.error, ymax=estimate+std.error)) +
+    geom_pointrange() +
+    coord_flip() +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank()
+    ) +
+    labs(
+      y="Estimated difference\nin taxon abundance", x=""
+    )
+```
