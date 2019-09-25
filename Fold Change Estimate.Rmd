@@ -1,0 +1,57 @@
+---
+title: "Fold Change Estimate"
+author: "Aurea Simon-Soro"
+date: \today
+output:
+  pdf_document: default
+  html_document: default
+---
+To run after the main Rmd file: Changes Body-Site. Kyle 1
+
+```{r}
+library(nlme)
+tidy_lmer <- function(lmer_test) {
+  mod <- summary(lmer_test)
+  data.frame(term  = rownames(mod$tTable), mod$tTable, row.names=NULL)
+}
+```
+
+```{r}
+
+# # The formula you would like to test. One example is "props_logit ~ study_group"
+#rep_mes_form # This is the repeated measures formula. Most likely it will be something like "~1|SubjectID"
+library(broom)
+summaries_df <- assignment_counts %>%
+    filter(SampleID %in% s_tb$SampleID) %>%
+    mutate(Assignment = fct_lump(Assignment, n=10, w=Proportion)) %>%
+    mutate(Proportion = Proportion + 1e-6) %>%
+    mutate(props_logit = log(Proportion/(1-Proportion))) %>%
+    left_join(select(s_tb, SampleID, study_group, SampleType), by="SampleID") %>%
+    group_by(Assignment, SampleType) %>%
+    do(tidy(lm(as.formula(props_logit ~ study_group), data=.))) %>%
+    ungroup() %>%
+    filter(term != '(Intercept)') %>%
+    filter(Assignment != "Other") %>%
+    group_by(term, SampleType) %>%
+    mutate(fdr = p.adjust(p.value, method="BH")) %>%
+    ungroup() 
+
+```
+```{r}
+## Getting the estimate and standard error from linear models (reduces to t-test with only 2 groups)
+
+summaries_df %>%
+  mutate(Assignment = fct_reorder(Assignment, estimate)) %>%
+  ggplot(aes(x=Assignment, y=estimate, ymin=estimate-std.error, ymax=estimate+std.error)) +
+    geom_pointrange(aes(color=estimate), position = position_dodge(width=0.5)) +
+    coord_flip() +
+    theme_bw() +
+    geom_hline(yintercept=0, lty=2) +
+    facet_grid(~SampleType) +
+  theme_boxplot() +
+scale_color_gradientn(colours=c("#e69f00","gray28","#56b4e9"), 
+breaks=c(-4,0,4), labels=format(c("PBS","","TB"))) +
+  theme(strip.text.x = element_text(size=12, angle=0)) +
+    labs(
+      y="Estimated difference\nin taxon abundance", x="", color="")
+```
