@@ -68,3 +68,77 @@ feces.Fstats <- merge_all(list_df)
 head(feces.Fstats)
 
 ```
+```{r Subset of Oral Swab}
+#Subset of each sampletype also including the distance matrix subset calculation for each one
+##Oral Swab
+Swab.df <- filter(s_tb, SampleType=="Oral Swab") #Dataframe 
+dist_in.Swab <- usedist::dist_subset(read_qiime_distmat(dist_fp), Swab.df$SampleID) #Distances
+
+
+.sex.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$sex_cage) %>% mutate(Category= "Sex")
+.weight.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$Weight.Interval) %>% mutate(Category= "Weight")
+.treatment.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$study_group) %>% mutate(Category= "Treatment")
+.CariesE.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesE.Interval) %>% mutate(Category= "Caries")
+.CariesDs.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesDs.Interval) %>% mutate(Category= "Caries")
+.CariesDm.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesDm.Interval) %>% mutate(Category= "Caries")
+.CariesDx.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesDx.Interval) %>% mutate(Category= "Caries")
+.Sm.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$S.mutans_CFU.jaw.Interval) %>% mutate(Category= "Infection")
+.Ca.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$C.albicans_CFU.jaw.Interval) %>% mutate(Category= "Infection")
+
+#Create dataframe with the numbers obtained for Swab F-statistics
+list_df <- list(.weight.Swab, .treatment.Swab, .sex.Swab, .CariesE.Swab, .CariesDs.Swab, .CariesDm.Swab, .CariesDx.Swab, .Sm.Swab, .Ca.Swab)
+Swab.Fstats <- merge_all(list_df) 
+  Swab.Fstats["SampleType"] <- "Oral Swab"
+head(Swab.Fstats)
+
+
+```
+
+```{r Subset of Dental Plaque}
+#Subset of each sampletype also including the distance matrix subset calculation for each one
+##Dental Plaque
+Plaque.df <- filter(s_tb, SampleType=="Dental Plaque") #Dataframe 
+dist_in.Plaque <- usedist::dist_subset(read_qiime_distmat(dist_fp), Plaque.df$SampleID) #Distances
+
+
+.sex.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$sex_cage) %>% mutate(Category= "Sex")
+.weight.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$Weight.Interval) %>% mutate(Category= "Weight")
+.treatment.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$study_group) %>% mutate(Category= "Treatment")
+.CariesE.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesE.Interval) %>% mutate(Category= "Caries")
+.CariesDs.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesDs.Interval) %>% mutate(Category= "Caries")
+.CariesDm.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesDm.Interval) %>% mutate(Category= "Caries")
+.CariesDx.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesDx.Interval) %>% mutate(Category= "Caries")
+.Sm.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$S.mutans_CFU.jaw.Interval) %>% mutate(Category= "Infection")
+.Ca.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$C.albicans_CFU.jaw.Interval) %>% mutate(Category= "Infection")
+
+#Create dataframe with the numbers obtained for Plaque F-statistics
+#NOTE TO FIX: I have to separate the Caries.E from Caries.Dx, Caries.Dm
+list_df <- list(.weight.Plaque, .treatment.Plaque, .sex.Plaque, .CariesE.Plaque, .CariesDs.Plaque, .CariesDm.Plaque, .CariesDx.Plaque, .Sm.Plaque, .Ca.Plaque)
+Plaque.Fstats <- merge_all(list_df) 
+  Plaque.Fstats["SampleType"] <- "Dental Plaque"
+head(Plaque.Fstats)
+```
+
+
+```{r}
+#Dataframe for all F-statistics
+list_df <- list(feces.Fstats, Swab.Fstats, Plaque.Fstats)
+Fstats.df <- merge_all(list_df)
+#filter(!p.adjusted > 0.05)
+```
+
+
+
+```{r}
+ggplot(Fstats.df, aes(SampleType, pairs)) + 
+  geom_tile(aes(fill = R2)) + 
+  facet_grid(Category~., scales="free", space = "free") +   
+  theme_boxplot() + 
+  labs(fill=parse(text='R^2')) +
+    theme(strip.text.y = element_text(size=12, angle=0)) +
+  viridis::scale_fill_viridis(option = "magma")
+ #ggsci::scale_fill_gsea()
+
+```
+
+
