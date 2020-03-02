@@ -1,5 +1,5 @@
 ---
-title: "Report: Dissimilarities Heatmap"
+title: "Report: Dissimilarities Heatmap (Fig. 3D)"
 author: "Aurea Simon-Soro"
 date: \today
 output:
@@ -8,336 +8,112 @@ output:
 ---
 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
-```{r load_scripts, echo=FALSE, message=TRUE, warning=TRUE}
-#Load scripts for 16S analysis
-
-library(qiimer)
-library(pander)
-library(kylemisc)
-library(fossil)
-library(plyr)
-library(tidyverse)
-library(gdata)
-library(pheatmap)
-library(forcats)
-library(ggthemes)
-library(viridis)
-library (ggbeeswarm)
-library(reshape2)
-library(vegan)
-library(ggrepel)
-library(gridExtra)
-library(ggpubr)
-library(ggtern)
-
-```
-
-Run after running the first .Rmd file "Aurea.SharedSpecies.QIIME2_v2.1"
+Run after running the first .Rmd file "Change.Body-Sites.Kyle.1.Rmd"
 This figure is following the methods of:https://www.pnas.org/content/115/25/E5786#sec-10 (figure 3)
 
-# Beta diversity. Bray_curtis
-```{r}
-dist_fp <- bc_fp
-dist_name <- "Bray-Curtis dissimilarities"
 
-```
-
-```{r Obtain the proportiona and axes for the amin genera}
-
-s_toPlot <- s %>%
-  filter(Keep) %>%
-  filter(Water=="Sucrose")
-props_toPlot <- summed_props[, s_toPlot$SampleID]  
-
-# Keep only taxa with more than 1% mean abundance
-# (adjust as desired)
-taxon_props <- props_toPlot[rowMeans(props_toPlot) > 0.01,]
-
-# Make sure the distance matrix is in the same order as the sample table
-dist_in <- usedist::dist_subset(read_qiime_distmat(dist_fp), s_toPlot$SampleID)
-#Clusters to incorporate in the dataframe
-bray_clusters <- hclust(dist_in, method="average", members = NULL)[s_toPlot$SampleID]
-
-bray_clusters_t <- t(hclust(dist_in, method="average", members = NULL))[s_toPlot$SampleID]
-# Here is the actual principal coordinates analysis
-pc <- pcoa(dist_in)
-# Get the first 3 principal coordinates as a matrix,
-#   make sure rows are in the same order as sample table
-s_coords <- pc$vectors[s_toPlot$SampleID,1:3]
-# Get the taxon proportions as a matrix,
-#   flip so that samples are in the rows,
-#   again make sure rows are in the correct order
-s_taxa <- t(taxon_props)[s_toPlot$SampleID,]
-
-# Stick the coordinates and taxon proportions onto
-#   the right side of the sample table
-pc_df <- cbind(s_toPlot, s_coords, s_taxa)
-
-```
-
-
-```{r PCoA arrow}
-# Make weights for each taxon
-# Weights should sum to 1, divide by total for each column
-taxon_weights <- apply(s_taxa, 2, function (x) x / sum(x))
-# Matrix multiplication seems tricky here,
-#   but we need to multiply sample weights by sample coordinates
-#   and sum to get the average. We need to do this for each coordinate
-#   axis and each taxon -- that's what matrix multiplication does.
-#   You can try it by hand for one coordinate axis and taxon and
-#   check that the answer is correct.
-taxon_centers_of_gravity <- t(taxon_weights) %*% s_coords
-# Convert to data frame
-taxon_centers_of_gravity <- as.data.frame(taxon_centers_of_gravity)
-# Dedicate one column to hold the taxon name
-taxon_centers_of_gravity$Taxon <- rownames(taxon_centers_of_gravity)
-
-# Splits the taxon name column by the 'space' into "Taxon" and "Taxon_name"
-taxon_centers_of_gravity <- separate(taxon_centers_of_gravity, Taxon, sep=" ", c("Taxon","Taxon_name"))
-# Removes the g__ or f__ in the Taxon_name column
-taxon_centers_of_gravity$Taxon_name <- substring(taxon_centers_of_gravity$Taxon_name, 4)
-
-#Percentaje of PC axes
-pc <- pcoa(dist_in)
-pctvar <- round(pc$values$Relative_eig * 100)
-
-```
-
-##Bray-Curtis Distances by Body Sites
-Presence/Absence
-```{r wu PCoA PLOT}
-library(ggrepel)
-
-
-bact.prop.axis <- melt(pc_df, id.vars=c('SubjectID', 'SampleType', 'study_group', 'Axis.1', 'Axis.2'), measure.vars=c(52:65), variable.name="Bacteria", value.name="Abundance") 
-
-ggplot(bact.prop.axis) +
-   geom_point(aes(x=Axis.1, y=Axis.2, color=study_group, shape=SampleType), size=3, alpha=0.8, stroke=1) +
-  geom_segment(aes(x=0, y=0, xend=Axis.1, yend=Axis.2), data=taxon_centers_of_gravity) +
-  ggsci::scale_color_d3(palette = c("category20")) +
-  geom_text_repel(aes(x=Axis.1, y=Axis.2, label=Taxon_name, fontface = 'italic'), data=taxon_centers_of_gravity, segment.size=0) +
-  stat_ellipse(aes_string(x="Axis.1", y="Axis.2", shape="SampleType"))+
-  theme_boxplot() +
-  labs(x=paste0("PC1 (", pctvar[1], "%)"), y=paste0("PC2 (", pctvar[2], "%)"), color="Project")
-  #theme_figures() 
-
-
-#ggsave(filename="/home/aurea/Koo/Tatsuro.Study/QIIME2.Analysis/Plots/wh.PCoA.png", type = c("cairo", "cairo-png", "Xlib", "quartz"), width = 8, height = 5, plot= .wh.PCoA)
-```
-
-
-```{r Pairwise function}
-pairwise.adonis <- function(x,factors, sim.method = 'bray', p.adjust.m ='bonferroni')
-{
-library(vegan)
-co = combn(unique(factors),2)
-pairs = c()
-F.Model =c()
-R2 = c()
-p.value = c()
-for(elem in 1:ncol(co)){
-ad = adonis(x[factors %in% c(co[1,elem],co[2,elem]),] ~ factors[factors %in% c(co[1,elem],co[2,elem])] , method =sim.method);
-pairs = c(pairs,paste(co[1,elem],'vs',co[2,elem]));
-F.Model =c(F.Model,ad$aov.tab[1,4]);
-R2 = c(R2,ad$aov.tab[1,5]);
-p.value = c(p.value,ad$aov.tab[1,6])
-}
-p.adjusted = p.adjust(p.value,method=p.adjust.m)
-pairw.res = data.frame(pairs,F.Model,R2,p.value,p.adjusted)
-return(pairw.res)
-}
-
-```
-
-```{r}
-#Function: Martinez Arbizu, P. (2019). pairwiseAdonis: Pairwise multilevel comparison using adonis. R package version 0.3 
-#https://github.com/pmartinezarbizu/pairwiseAdonis
-library(pairwiseAdonis)
-fac <- data.frame(SampleType=s_toPlot$SampleType, project =s_toPlot$project, study_day=s_toPlot$study_day)
-pairwise.adonis2(dist_in ~ SampleType/project/study_day, data = fac)
-#adonis2(dist_in ~ study_day, data=pc_df, method = "bray")
-#adonis2(dist_in ~ project, data=pc_df, method = "bray")
-```
-
-
-```{r Pairwise .adonis for matrix}
-pairwise.adonis.dm <- function(x,factors,stratum=NULL,p.adjust.m="bonferroni",perm=999){
-  
-  library(vegan)
-  
-  if(class(x) != "dist") stop("x must be a dissimilarity matrix (dist object)")
-  
-  co = as.matrix(combn(unique(factors),2))
-  
-  pairs = c()
-  
-  F.Model =c()
-  
-  R2 = c()
-  
-  p.value = c()
-
-  for(elem in 1:ncol(co)){
-    
-    sub_inds <- factors %in% c(as.character(co[1,elem]),as.character(co[2,elem]))
-    
-    resp <- as.matrix(x)[sub_inds,sub_inds]
-    
-    ad = adonis(as.dist(resp) ~
-                  
-                  factors[sub_inds], strata=stratum[sub_inds], permutations=perm);
-    
-    pairs = c(pairs,paste(co[1,elem],'vs',co[2,elem]));
-    
-    F.Model =c(F.Model,ad$aov.tab[1,4]);
-    
-    R2 = c(R2,ad$aov.tab[1,5]);
-    
-    p.value = c(p.value,ad$aov.tab[1,6])
-    
-  }
-
-  p.adjusted = p.adjust(p.value,method=p.adjust.m)
-  
-  pairw.res = data.frame(pairs,F.Model,R2,p.value,p.adjusted)
-  
-  return(pairw.res)
-  
-}
-```
-
+# Beta diversity. Bray_curtis for TB and PBS groups
 
 ```{r Intervals Caries}
 #Create a column defining the interval of 
 ##Caries.E
-s_toPlot$CariesE.Interval<-ifelse(s_toPlot$Caries.E<11,rr2<-"<10",
-                     ifelse(s_toPlot$Caries.E>10&s_toPlot$Caries.E<26,rr2<-"10-25",
-                             ifelse(s_toPlot$Caries.E>25&s_toPlot$Caries.E<51,rr2<-"26-50",
-                          ifelse(s_toPlot$Caries.E>50&s_toPlot$Caries.E<1000,rr2<-">50",
-                                                 rr2<-"outlier"))))
-
-s_toPlot$CariesE.Interval<-factor(s_toPlot$CariesE.Interval, levels = c("<10", "10-25", "26-50", ">50"))
+s_tb$CariesE.Interval <-cut(s_tb$Caries.E, breaks=c(0,9,24,49,99), labels = c("E.<10", "E.10-25", "E.26-50", "E.>50")) 
 
 ##Caries.Ds
-s_toPlot$CariesDs.Interval<-ifelse(s_toPlot$Caries.Ds<11,rr2<-"<10",
-                     ifelse(s_toPlot$Caries.Ds>10&s_toPlot$Caries.Ds<26,rr2<-"10-25",
-                             ifelse(s_toPlot$Caries.Ds>25&s_toPlot$Caries.Ds<51,rr2<-"26-50",
-                          ifelse(s_toPlot$Caries.Ds>50&s_toPlot$Caries.Ds<1000,rr2<-">50",
-                                                 rr2<-"outlier"))))
+s_tb$CariesDs.Interval <-cut(s_tb$Caries.Ds, breaks=c(0,9,24,49,99), labels = c("Ds.<10", "Ds.10-25", "Ds.26-50", "Ds.>50")) 
 
-s_toPlot$CariesDs.Interval<-factor(s_toPlot$CariesDs.Interval, levels = c("<10", "10-25", "26-50",  ">50"))
 
 ##Caries.Dm
-s_toPlot$CariesDm.Interval<-ifelse(s_toPlot$Caries.Dm<11,rr2<-"<10",
-                     ifelse(s_toPlot$Caries.Dm>10&s_toPlot$Caries.Dm<26,rr2<-"10-25",
-                             ifelse(s_toPlot$Caries.Dm>25&s_toPlot$Caries.Dm<51,rr2<-"26-50",
-                          ifelse(s_toPlot$Caries.Dm>50&s_toPlot$Caries.Dm<1000,rr2<-">50",
-                                                 rr2<-"outlier"))))
-
-s_toPlot$CariesDm.Interval<-factor(s_toPlot$CariesDm.Interval, levels = c("<10", "10-25", "26-50",  ">50"))
+s_tb$CariesDm.Interval <-cut(s_tb$Caries.Dm, breaks=c(0,9,24,49,99), labels = c("Dm.<10", "Dm.10-25", "Dm.26-50", "Dm.>50"))
 
 ##Caries.Dx
-s_toPlot$CariesDx.Interval<-ifelse(s_toPlot$Caries.Dx<11,rr2<-"<10",
-                     ifelse(s_toPlot$Caries.Dx>10&s_toPlot$Caries.Dx<26,rr2<-"10-25",
-                             ifelse(s_toPlot$Caries.Dx>25&s_toPlot$Caries.Dx<51,rr2<-"26-50",
-                          ifelse(s_toPlot$Caries.Dx>50&s_toPlot$Caries.Dx<1000,rr2<-">50",
-                                                 rr2<-"outlier"))))
+s_tb$CariesDx.Interval <-cut(s_tb$Caries.Dx, breaks=c(0,9,24,49,99), labels = c("Dx.<10", "Dx.10-25", "Dx.26-50",  "Dx.>50")) 
 
-s_toPlot$CariesDx.Interval<-factor(s_toPlot$CariesDx.Interval, levels = c("<10", "10-25", "26-50",  ">50"))
 ```
 
 ```{r Intervals Weight}
 #Create a column defining the interval of 
 ##Weight
-s_toPlot$Weight.Interval<-ifelse(s_toPlot$Weight<81,rr2<-"<80",
-                     ifelse(s_toPlot$Weight>80&s_toPlot$Weight<91,rr2<-"80-90",
-                          ifelse(s_toPlot$Weight>90&s_toPlot$Weight<1000,rr2<-">90",
-                                                 rr2<-"outlier")))
+s_tb$Weight.Interval <-cut(s_tb$Weight, breaks=c(0,79,89,100), labels = c("weight.<80", "weight.80-90", "weight.>90")) %>% as.factor()
+```
 
-s_toPlot$Weight.Interval<-factor(s_toPlot$Weight.Interval, levels = c("<80", "80-90", ">90"))
+```{r Intervals CFU}
+#Create a column defining the interval of 
+##Candida albicans CFU jaw
+s_tb$C.albicans_CFU.jaw.Interval <-cut(s_tb$C.albicans_CFU.jaw, breaks=c(0,99,999,9999,99999), labels = c("Ca.<1e2", "Ca.1e2-1e3", "Ca.1e3-1e4", "Ca.>1e4"))
+##S.mutans CFU jaw
+s_tb$S.mutans_CFU.jaw.Interval <-cut(s_tb$S.mutans_CFU.jaw, breaks=c(0,99999,999999, Inf), labels = c("Sm.<1e5", "Sm.1e5-1e6", "Sm.>1e6"))
+
 
 ```
 
-#TATSURO SUBSET
-To test the hypothesis, I will use only the samples from Tasuro, since I have all the metadata included
-```{r TATSURO SUBSET}
-s_toPlot.Tatsuro <- filter(s_toPlot, project=="MHK10.01.2019") #Dataframe 
-dist_in.Tatsuro <- usedist::dist_subset(read_qiime_distmat(dist_fp), s_toPlot.Tatsuro$SampleID) #Distances
-```
-
-
-```{r Subset of Feces}
-#Subset of each sampletype also including the distance matrix subset calculation for each one
 ##Feces
-Feces.df <- filter(s_toPlot.Tatsuro, SampleType=="Feces") #Dataframe 
+```{r Subset of Feces}
+
+#Subset of each sampletype also including the distance matrix subset calculation for each one
+##Oral Swab
+Feces.df <- filter(s_tb, SampleType=="Feces") #Dataframe 
 dist_in.feces <- usedist::dist_subset(read_qiime_distmat(dist_fp), Feces.df$SampleID) #Distances
 
-#.project.feces<-pairwise.adonis.dm(dist_in.feces, Feces.df$project)
-#.age.feces<- pairwise.adonis.dm(dist_in.feces, Feces.df$study_day)
-.sex.feces<- pairwise.adonis.dm(dist_in.feces, Feces.df$sex_cage)
-#.infection.feces<- pairwise.adonis.dm(dist_in.feces, Feces.df$Oral.Infection)
-.treatment.feces<- pairwise.adonis.dm(dist_in.feces, Feces.df$study_group)
+.sex.feces<- pairwise.adonis.dm(dist_in.feces, Feces.df$sex_cage) %>% mutate(Category= "Sex")
+.treatment.feces<- pairwise.adonis.dm(dist_in.feces, Feces.df$study_group)  %>% mutate(Category= "Treatment")
 
 
 #Create dataframe with the numbers obtained for Feces F-statistics
 library(reshape)
-list_df <- list(.treatment.feces)
+list_df <- list(.treatment.feces, .sex.feces)
 feces.Fstats <- merge_all(list_df) 
   feces.Fstats["SampleType"] <- "Feces"
 head(feces.Fstats)
 
 ```
-
-
 ```{r Subset of Oral Swab}
 #Subset of each sampletype also including the distance matrix subset calculation for each one
 ##Oral Swab
-Swab.df <- filter(s_toPlot.Tatsuro, SampleType=="Oral Swab") #Dataframe 
+Swab.df <- filter(s_tb, SampleType=="Oral Swab") #Dataframe 
 dist_in.Swab <- usedist::dist_subset(read_qiime_distmat(dist_fp), Swab.df$SampleID) #Distances
 
-#.project.Swab<-pairwise.adonis.dm(dist_in.Swab, Swab.df$project)
-#.age.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$study_day)
-.sex.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$sex_cage)
-#.infection.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$Oral.Infection)
-.weight.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$Weight.Interval)
-.treatment.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$study_group)
-.CariesDs.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesDs.Interval)
-.CariesDm.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesDm.Interval)
-.CariesDx.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesDx.Interval)
+
+.sex.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$sex_cage) %>% mutate(Category= "Sex")
+.weight.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$Weight.Interval) %>% mutate(Category= "Weight")
+.treatment.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$study_group) %>% mutate(Category= "Treatment")
+.CariesE.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesE.Interval) %>% mutate(Category= "Caries")
+.CariesDs.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesDs.Interval) %>% mutate(Category= "Caries")
+.CariesDm.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesDm.Interval) %>% mutate(Category= "Caries")
+.CariesDx.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$CariesDx.Interval) %>% mutate(Category= "Caries")
+.Sm.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$S.mutans_CFU.jaw.Interval) %>% mutate(Category= "Infection")
+.Ca.Swab<- pairwise.adonis.dm(dist_in.Swab, Swab.df$C.albicans_CFU.jaw.Interval) %>% mutate(Category= "Infection")
 
 #Create dataframe with the numbers obtained for Swab F-statistics
-library(reshape)
-list_df <- list(.weight.Swab, .treatment.Swab, .CariesDs.Swab, .CariesDm.Swab, .CariesDx.Swab)
+list_df <- list(.weight.Swab, .treatment.Swab, .sex.Swab, .CariesE.Swab, .CariesDs.Swab, .CariesDm.Swab, .CariesDx.Swab, .Sm.Swab, .Ca.Swab)
 Swab.Fstats <- merge_all(list_df) 
   Swab.Fstats["SampleType"] <- "Oral Swab"
 head(Swab.Fstats)
+
 
 ```
 
 ```{r Subset of Dental Plaque}
 #Subset of each sampletype also including the distance matrix subset calculation for each one
 ##Dental Plaque
-Plaque.df <- filter(s_toPlot.Tatsuro, SampleType=="Dental Plaque") #Dataframe 
+Plaque.df <- filter(s_tb, SampleType=="Dental Plaque") #Dataframe 
 dist_in.Plaque <- usedist::dist_subset(read_qiime_distmat(dist_fp), Plaque.df$SampleID) #Distances
 
-#.project.Plaque<-pairwise.adonis.dm(dist_in.Plaque, Plaque.df$project)
-#.age.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$study_day)
-.sex.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$sex_cage)
-#.infection.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$Oral.Infection)
-.weight.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$Weight.Interval)
-.treatment.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$study_group)
-.CariesE.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesE.Interval)
-.CariesDs.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesDs.Interval)
-.CariesDm.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesDm.Interval)
-.CariesDx.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesDx.Interval)
+
+.sex.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$sex_cage) %>% mutate(Category= "Sex")
+.weight.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$Weight.Interval) %>% mutate(Category= "Weight")
+.treatment.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$study_group) %>% mutate(Category= "Treatment")
+.CariesE.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesE.Interval) %>% mutate(Category= "Caries")
+.CariesDs.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesDs.Interval) %>% mutate(Category= "Caries")
+.CariesDm.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesDm.Interval) %>% mutate(Category= "Caries")
+.CariesDx.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$CariesDx.Interval) %>% mutate(Category= "Caries")
+.Sm.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$S.mutans_CFU.jaw.Interval) %>% mutate(Category= "Infection")
+.Ca.Plaque<- pairwise.adonis.dm(dist_in.Plaque, Plaque.df$C.albicans_CFU.jaw.Interval) %>% mutate(Category= "Infection")
 
 #Create dataframe with the numbers obtained for Plaque F-statistics
-library(reshape)
-list_df <- list(.weight.Plaque, .CariesE.Plaque, .CariesDm.Plaque, .CariesDx.Plaque)
+#NOTE TO FIX: I have to separate the Caries.E from Caries.Dx, Caries.Dm
+list_df <- list(.weight.Plaque, .treatment.Plaque, .sex.Plaque, .CariesE.Plaque, .CariesDs.Plaque, .CariesDm.Plaque, .CariesDx.Plaque, .Sm.Plaque, .Ca.Plaque)
 Plaque.Fstats <- merge_all(list_df) 
   Plaque.Fstats["SampleType"] <- "Dental Plaque"
 head(Plaque.Fstats)
@@ -346,33 +122,23 @@ head(Plaque.Fstats)
 
 ```{r}
 #Dataframe for all F-statistics
-library(reshape)
 list_df <- list(feces.Fstats, Swab.Fstats, Plaque.Fstats)
-Fstats.df <- merge_all(list_df) %>%
-filter(!p.adjusted > 0.05)
+Fstats.df <- merge_all(list_df)
+#filter(!p.adjusted > 0.05)
 ```
 
-  
-#Example: Another Heatmap
+
 
 ```{r}
-
-theme_heatmap = theme_classic(base_size = 12) + theme(
-  line = element_line(size=0.8),
-  text = element_text(size=15),
-  axis.text.x = element_text(face="bold", color="black"),
-  axis.text.y = element_text(color="black")
-)
-
-
 ggplot(Fstats.df, aes(SampleType, pairs)) + 
-  geom_tile(aes(fill = F.Model)) + 
-  #facet_grid (~study_group, scales="free", labeller = label_parsed) +   
-  theme_heatmap + 
-  #theme(axis.text.x=element_blank(), axis.ticks.x=element_blank()) + 
-  labs(fill="F-statistics") +
- ggsci::scale_fill_gsea()
-
-
+  geom_tile(aes(fill = R2)) + 
+  facet_grid(Category~., scales="free", space = "free") +   
+  theme_boxplot() + 
+  labs(fill=parse(text='R^2')) +
+    theme(strip.text.y = element_text(size=12, angle=0)) +
+  viridis::scale_fill_viridis(option = "magma")
+ #ggsci::scale_fill_gsea()
 
 ```
+
+
