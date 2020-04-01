@@ -1,0 +1,595 @@
+---
+title: "Body-sites microbiome in animal model_PBS.TB"
+subtitle: "Figure 1, 3 and 4A-C"
+author: "Aurea Simon-Soro and Kyle Bittinger"
+date: \today
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r knitr setup, echo=FALSE}
+### ================
+###   knitr setup
+### ================
+library(knitr)
+opts_chunk$set(
+  tidy=FALSE,
+  cache=TRUE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  dpi=100,
+  fig.width=8,
+  fig.height=8,
+  fig.align = "center"
+  )
+```
+
+<!-- R packages -->
+```{r R packages, message=FALSE}
+### ================
+###   R packages
+### ================
+#This package will also help us more easily manipulate our data
+library(magrittr)
+library(qiimer)
+library(pander)
+#Analyses of Phylogenetics and Evolution package. Required for tree calculations to be used with phyloseq
+library(ape)
+#The vegan package provides tools for descriptive community ecology. It has most basic functions of diversity analysis, community ordination and dissimilarity analysis. In general, this package is used for Bray-Curtis and Jaccard analyses.
+library(vegan)
+library(usedist)
+library(tidyverse)
+library(tibble)
+#The phyloseq package seeks to address issues with multiple microbiome analysis packages by providing a set of functions that internally manage the organizing, linking, storing, and analyzing of phylogenetic sequencing data. In general, this package is used for UniFrac analyses.
+library(phyloseq)
+#Pretty Venn disgrams
+library(VennDiagram)
+library(ggbeeswarm)
+library(ggtern)
+library(ggthemes)
+library(reshape2)
+library(kylemisc)
+library(ggrepel)
+library(ggsci)
+```
+
+
+
+<!-- resources -->
+```{r resources}
+### ================
+###   R resources
+### ================
+source("/home/aurea/R_functions.R")
+```
+
+
+```{r}
+### ===========================
+###   define constants
+### ===========================
+### minimum reads threshold
+min_reads <- 1000
+### rarefying subsample size 
+richness_subsample_size <- 1000
+### number of samples threshold to show heatmap on the page
+sample_threshold <- 100
+### setwd
+#fill in your project dir
+# From Kyle:
+# To keep the project self-contained, place the data inside the project
+# directory and use relative paths.  Here, I put the files in inst/extdata.
+# If this project ever turns into an R package, you can keep the data files
+# right where they are.
+#Aurea: Here I used only the TATSURO's study samples. (decided after kyle, Michel meeting)
+root_dir <- "/home/aurea/Koo/Tatsuro.Study/QIIME2.Analysis/"
+### mapping file path
+mapping_file_fp <- file.path(root_dir, "MF_Tatsuro.txt")
+### otu table file path
+feature_table_fp <- file.path(root_dir, "feature-table.tsv")
+### taxonomic assignment 
+taxo_assignment_fp <- file.path(root_dir, "taxonomy.tsv")
+### Bray-Curtis Dissimilarities file path
+bc_fp <- file.path(root_dir, "bc_distance-matrix.tsv")
+### faith
+faith_fp <- file.path(root_dir, "alpha-diversity.tsv")
+```
+
+```{r}
+study_group_levels <- c("PBS", "TB")
+#water_levels <- c("Sucrose")
+sample_type_levels <- c("Oral Swab", "Dental Plaque", "Feces")
+```
+
+
+```{r, warning=F, message=F}
+### ===========================
+###   read in data
+### ===========================
+### read mapping file
+s <- read_tsv(mapping_file_fp) %>%
+  rename(SampleID = "#SampleID") %>%
+  # Fix sequencing control samples
+  mutate(SampleType = if_else(
+    (study_group %in% "Contamination Control"), "Blank oral swab", SampleType)) %>%
+  mutate(is_seq_control = is.na(HostSpecies)) %>%
+  mutate(study_color = na_if(study_color, "Contamination Control")) %>%
+  mutate(study_group = na_if(study_group, "Contamination Control")) %>%
+  # Assign levels
+  mutate(study_group = fct_relevel(study_group, study_group_levels)) %>%
+  #mutate(Water = fct_relevel(Water, water_levels)) %>%
+  mutate(SampleType = fct_relevel(SampleType, sample_type_levels))
+```
+
+
+```{r message=FALSE}
+### read otu table
+assignments <- read_tsv(file=taxo_assignment_fp) %>%
+  rename(Lineage = Taxon, OtuID = `Feature ID`) %>%
+  do(bind_cols(., split_assignments(.$Lineage))) %>%
+  mutate_at(taxonomic_ranks, str_remove, "[kpcofgs]__") %>%
+  mutate_at(taxonomic_ranks, na_if, "") %>%
+  mutate(Assignment = simplify_assignments(.[taxonomic_ranks]))
+otu_counts <- readr::read_tsv(feature_table_fp, skip=1) %>%
+  rename(OtuID = "#OTU ID") %>%
+  gather(SampleID, Counts, -OtuID) %>%
+  left_join(assignments, by="OtuID") %>%
+  filter(!str_detect(Family, "mitochondria")) %>%
+  filter(!str_detect(Class, "Chloroplast")) %>%
+  filter(!str_detect(Kingdom, "Unassigned")) %>%
+  filter(!str_detect(Kingdom, "Archaea")) %>%
+  group_by(SampleID) %>%
+  filter(sum(Counts) > 0)
+if (!all(otu_counts$OtuID %in% assignments$OtuID)) {
+  stop("Some OTUs not in taxonomic assignments table")
+}
+assignment_counts <- otu_counts %>%
+  group_by(SampleID, Assignment) %>%
+  summarize(Counts = sum(Counts)) %>%
+  ungroup() %>%
+  group_by(SampleID) %>%
+  mutate(Proportion = Counts / sum(Counts)) %>%
+  ungroup()
+read_counts <- otu_counts %>%
+  group_by(SampleID) %>%
+  summarize(NumReads = sum(Counts))
+```
+
+No reads after contamination/archaea removal.
+
+```{r, Samples error check 1}
+### ===========================
+###   check for missing samples
+### ===========================
+### possible issue 1: Samples found in the sample sheet but not in the feature table (0 reads)
+s %>%
+  filter(!(SampleID %in% read_counts$SampleID)) %>%
+  select(SampleID, SampleType)
+```
+
+Samples in feature table but not sample info table.
+
+```{r, Samples error check 2}
+### possible issue 2: Samples found in the feature table but not in the sample sheet. There must be an error!
+read_counts %>%
+  filter(!(SampleID %in% s$SampleID))
+```
+
+
+```{r theme, include=FALSE}
+theme_set(theme_classic() + theme(
+axis.line.x = element_line(colour = 'black', size=0.5, linetype='solid'),
+axis.line.y = element_line(colour = 'black', size=0.5, linetype='solid'))) 
+theme_boxplot <- function () {theme_base(base_size = 15) + 
+                theme(line = element_line(size=0.8),
+                text = element_text(size = 18),
+                axis.text.x = element_text(color="black"),
+                axis.text.y = element_text(color="black"),
+                plot.background=element_blank())}
+theme_figures <- function () {theme_kyle() +
+                theme(line = element_line(size=0.8),
+                text = element_text(size = 18),
+                axis.text.x = element_text(color="black"),
+                axis.text.y = element_text(color="black"),
+                plot.background=element_blank())}
+theme_scatterplot <- function () {theme_base(base_size = 12) + theme(
+  line = element_line(size=0.8),
+  text = element_text(face = "bold", color = "black"),
+  axis.text.x = element_text(face="bold", color="black"),
+  axis.text.y = element_text(face="bold", color="black"),
+                plot.background=element_blank())}
+```
+
+
+```{r general quantification, include=FALSE}
+## Whole samples that are above the `r min_reads` read count threshold
+s %>%
+  left_join(read_counts, by="SampleID") %>%
+  mutate(NumReads = replace_na(NumReads, 0)) %>%
+  mutate(Keep = if_else(NumReads > min_reads, "Keep", "Discard")) %>%
+  count(SampleType, Keep) %>%
+  spread(Keep, n) %>%
+  pander()
+```
+
+```{r Color Palette, include=FALSE}
+cols_group <- c("PBS" ="#e69f00", "TB"= "#56b4e9")
+cols_Site <- c("#6ad54a", "#4743c7", "#ae1c00")
+```
+
+
+```{r}
+### ===========================
+###   calculate / read in alpha diversity
+### ===========================
+faith_df <- read_tsv(file=faith_fp) %>%
+  rename(SampleID=X1)
+alpha_df <- otu_counts %>%
+  group_by(SampleID) %>%
+  summarize(
+    Shannon = diversity(Counts),
+    Richness = rarefy(Counts, 1000)) %>%
+  left_join(faith_df, by="SampleID")
+```
+
+```{r}
+# read in beta diversity
+bc <- read_qiime_distmat(bc_fp)
+```
+
+
+# Overview
+This report is based on the results of 16S sequencing performed on MHK10.01.2019 for Tatsuro's Project. _Candida albicans_ and _S. mutans_
+
+```{r, fig.width=6, fig.height=4, warning=F, include=FALSE}
+## Histogram of high quality paired reads per sample
+#The black dashed vertical line shows the minimum number of reads (`r min_reads`) for analysis. Control samples, if any, were included in the histogram.
+s %>%
+  left_join(read_counts, by="SampleID") %>%
+  ggplot(aes(x=NumReads)) +
+  geom_histogram(aes(fill=SampleType), binwidth=1000) +
+  geom_vline(xintercept = min_reads, color="black", linetype="dashed") +
+  scale_fill_d3() +
+  labs(x="Number of reads", y="Number of samples") +
+  theme_bw()
+```
+
+
+```{r}
+s_sites <- s %>%
+  left_join(read_counts, by="SampleID") %>%
+  filter(NumReads > min_reads) %>%
+  filter(study_group %in% c("PBS", "TB"))
+```
+
+##Figure 1
+###Fig 1A: Beta diversity body-sites
+
+```{r}
+dist_fp <- bc_fp
+dist_name <- "Bray-Curtis Unifrac distances"
+```
+The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
+```{r Obtain the proportion and axes for the main genera}
+bc_sites <- dist_subset(bc, s_sites$SampleID)
+# Here is the actual principal coordinates analysis
+pc <- pcoa(bc_sites)
+pctvar <- round(pc$values$Relative_eig * 100)
+# Principal coordinate positions of samples
+s_coords <- pc$vectors %>%
+  as.data.frame() %>%
+  rownames_to_column("SampleID") %>%
+  select(1:4)
+# Principal coordinate positions of taxa
+taxa_coords <- assignment_counts %>%
+  # Filter to include samples in this analysis
+  right_join(s_coords, by="SampleID") %>%
+  # Filter to keep high-abundance taxa
+  group_by(Assignment) %>%
+  filter(mean(Proportion) > 0.02) %>%
+  ungroup() %>%
+  # Weighted mean position along each axis
+  gather(Axis, SamplePosition, starts_with("Axis")) %>%
+  group_by(Assignment, Axis) %>%
+  summarize(
+    TaxonPosition = weighted.mean(SamplePosition, Proportion),
+    MeanProp = mean(Proportion)) %>%
+  ungroup() %>%
+  spread(Axis, TaxonPosition) %>%
+  # Make the labels nicer
+  mutate(TaxonLabel = str_remove(Assignment, "^\\w+ "))
+```
+
+```{r Plot PCoA Body.sites, fig.width=7, fig.height=5}
+s_sites %>%
+  left_join(s_coords, by="SampleID") %>%
+  ggplot(aes(x=Axis.1, y=Axis.2)) +
+  geom_point(
+    aes(fill=SampleType), shape= 21, size=5) +
+  scale_fill_manual(values = cols_Site) +
+  geom_text_repel(
+    aes(label=TaxonLabel), fontface = 'bold.italic',
+    data=taxa_coords, segment.size=0) +
+  stat_ellipse(aes(group=SampleType)) +
+  labs(
+    x=paste0("PC1 (", pctvar[1], "%)"),
+    y=paste0("PC2 (", pctvar[2], "%)"),
+     fill="") +
+   theme_scatterplot() +
+ #theme(legend.position="bottom") +
+  theme(text = element_text(size = 16))  +
+  xlim(-0.7, 0.7) +
+  ylim(-0.7, 0.7)
+ 
+#ggsave("inst/figures/sites_braycurtis.pdf", width=7, height=5, useDingbats=F)
+```
+
+```{r test, include=FALSE}
+source("/home/aurea/Function.Pairwise.Adonis.dm.R")
+fstats_df <- pairwise.adonis.dm(bc_sites, s_sites$SampleType)
+fstats_df
+```
+
+
+
+### Fig 1D
+Rat and human body-site differences
+
+```{r fig.height=2, fig.width=5}
+fstats_df %>%
+  ggplot() +
+  geom_col(aes(x=pairs, y=R2, fill=pairs)) +
+  scale_fill_manual(values = cols_Site, guide=FALSE) +
+  scale_y_continuous(limits = c(0, 1)) +
+  coord_flip() +
+  labs(x="", y=parse(text='R^2')) +
+  theme_boxplot()
+#ggsave("inst/figures/sites_r2.pdf", width=5, height=2)
+```
+
+###Fig S1: Alpha Diversity
+```{r }
+alpha2 <- s_sites %>%
+  mutate(SampleType = str_replace(SampleType, " ", "\n")) %>%
+  mutate(SampleType = fct_relevel(SampleType, "Oral\nSwab")) %>%
+  left_join(alpha_df, by="SampleID") %>%
+  melt(id.vars=c('SampleID', 'SampleType', 'study_group'), measure.vars=c('Shannon', 'faith_pd'), variable.name="alpha", value.name="values")
+```
+
+```{r, fig.height=4.5, fig.width=7}
+
+  ggplot(alpha2, aes(x=SampleType, y=values)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_beeswarm(aes(color=study_group), alpha=0.5) +
+  scale_color_manual(values = cols_group, guide=FALSE) +
+  labs(x="", y="") +
+  facet_wrap( ~alpha , scales = "free") +
+  theme_boxplot() 
+
+```
+
+
+##Fig 3 Metadata PLOTS
+###Fig 3B: Caries levels 
+```{r}
+cariesdata <- melt(s_sites,id.vars=c('study_group', 'SampleID', 'SampleType'), measure.vars=c('Caries.E', 'Caries.Ds', 'Caries.Dm', 'Caries.Dx'), variable.name="Caries", value.name="Counts") %>%
+ filter(SampleType=="Dental Plaque")
+
+# Calculates mean, sd, se and IC
+my_sum.caries <- cariesdata %>%
+  na.omit(.) %>%
+  group_by(Caries, study_group) %>%
+  summarise( 
+    n=n(),
+    mean=mean(Counts),
+    sd=sd(Counts)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+```
+
+
+```{r Caries PLOT}
+
+ggplot(my_sum.caries, aes(Caries, mean, fill=study_group)) +
+  geom_bar(stat = "identity", position = position_dodge(width=0.9)) +
+geom_errorbar(aes(x=Caries, ymin=mean-sd, ymax=mean+sd),
+   width=0.2, position=position_dodge(width=0.9), alpha=0.9, size=0.5) +
+  scale_fill_manual(values = cols_group) +
+  theme_boxplot() +
+  facet_grid(~Caries, scales = "free") + 
+  labs(y= "Caries", x= "", fill="", title= "Dental Caries")  +
+theme(plot.title = element_text(hjust = 0.5), strip.text.x = element_blank())
+  
+#Stats   
+cariesdata %>%
+  filter(Caries=="Caries.Dx") %>%
+  with(pairwise.t.test(
+    Counts, study_group))
+```
+
+
+###Fig 3C: CFUs 
+S. mutans and C. albicans colony forming units per ml of dental plaque
+
+```{r}
+CFUdata <- melt(s_sites,id.vars=c('study_group', 'SampleID'), measure.vars=c('S.mutans_CFU.ml', 'C.albicans_CFU.ml'), variable.name="CFU", value.name="Counts")
+
+# Calculates mean, sd, se and IC
+my_sum <- CFUdata %>%
+  na.omit(.) %>%
+  group_by(CFU, study_group) %>%
+  summarise( 
+    n=n(),
+    mean=mean(Counts),
+    sd=sd(Counts)
+  ) %>%
+  mutate( se=sd/sqrt(n))  %>%
+  mutate( ic=se * qt((1-0.05)/2 + .5, n-1))
+
+```
+
+
+```{r CFU PLOT}
+ggplot(my_sum, aes(CFU, mean, fill=study_group)) +
+  geom_bar(stat = "identity", position = position_dodge(width=0.9)) +
+  geom_errorbar(aes(x=CFU, ymin=mean-sd, ymax=mean+sd),
+    width=0.2, position=position_dodge(width=0.9), alpha=0.9, size=0.5) +
+  scale_fill_manual(values = cols_group) +
+  scale_y_log10() +
+  annotation_logticks(sides = "l") +   
+  theme_boxplot() +
+  facet_grid(~CFU, scales = "free") +
+  labs(y= "CFUs/ml", x= "", fill="", title= "Infection Level")  +
+  theme(plot.title = element_text(hjust = 0.5), strip.text.x = element_blank())
+```
+
+##Figure 4
+###Fig 4A: Taxa
+Bacteria with more than 1% mean relative abundance
+```{r}
+taxa <- assignment_counts %>%
+  filter(SampleID %in% s_sites$SampleID) %>%
+  mutate(Assignment = fct_lump(Assignment, n=10, w=Proportion)) %>%
+  # Sum in each sample
+  group_by(SampleID, Assignment) %>%
+  summarize(Proportion = sum(Proportion)) %>%
+  ungroup() %>%
+  # Average within groups
+  left_join(s_sites, by="SampleID") %>%
+  group_by(SampleType, study_group, Assignment) %>%
+  summarize(Proportion = mean(Proportion)) %>%
+  ungroup()
+```
+
+
+```{r Bar Plot Taxa, fig.height=5}
+taxa %>%
+  ggplot(aes(x=study_group, y=Proportion)) +
+  geom_col(aes(fill = Assignment)) +
+  labs(x= "Treatment", y= "Bacterial Abundance") +
+  ggsci::scale_fill_d3(palette = c("category20")) +
+  labs(x="", y="Relative Abundance", fill="Bacteria") +
+  theme_boxplot() +
+  facet_grid(~SampleType, scales= "free") 
+```
+###Fig 4B: Fold-change estimate
+```{r}
+library(nlme)
+tidy_lmer <- function(lmer_test) {
+  mod <- summary(lmer_test)
+  data.frame(term  = rownames(mod$tTable), mod$tTable, row.names=NULL)
+}
+```
+
+```{r}
+
+# # The formula you would like to test. One example is "props_logit ~ study_group"
+#rep_mes_form # This is the repeated measures formula. Most likely it will be something like "~1|SubjectID"
+library(broom)
+summaries_df <- assignment_counts %>%
+    filter(SampleID %in% s_sites$SampleID) %>%
+    mutate(Assignment = fct_lump(Assignment, n=10, w=Proportion)) %>%
+    mutate(Proportion = Proportion + 1e-6) %>%
+    mutate(props_logit = log(Proportion/(1-Proportion))) %>%
+    left_join(select(s_sites, SampleID, study_group, SampleType), by="SampleID") %>%
+    group_by(Assignment, SampleType) %>%
+    do(tidy(lm(as.formula(props_logit ~ study_group), data=.))) %>%
+    ungroup() %>%
+    filter(term != '(Intercept)') %>%
+    filter(Assignment != "Other") %>%
+    group_by(term, SampleType) %>%
+    mutate(fdr = p.adjust(p.value, method="BH")) %>%
+    ungroup() 
+
+```
+
+```{r Plot Fold-change, fig.height=5, fig.width=8}
+## Getting the estimate and standard error from linear models (reduces to t-test with only 2 groups)
+library(ggpubr) 
+df2 <- summaries_df %>% mutate(Xn=as.numeric(Assignment))
+summaries_df %>%
+       mutate(Assignment = fct_reorder(Assignment, estimate)) %>%
+       ggdotchart(x = "Assignment", y = "estimate",
+           color = "SampleType",                                # Color by groups
+           palette = cols_Site, # Custom color palette
+           sorting = "descending",                       # Sort value in descending order
+           add = "segments",
+           add.params = list(color = "lightgray", size = 1.5),# Add segments from y = 0 to dots
+           rotate = TRUE,                                # Rotate vertically
+           group = "SampleType",                                # Order by groups
+           dot.size = 6,                                 # Large dot size
+           ggtheme = theme_pubr()                        # ggplot2 theme
+           ) +
+        geom_hline(yintercept=0, lty=2) +
+        theme_boxplot() +
+        ylim(-5, 5) +
+        labs(y="Estimated difference\nin taxon abundance", x="", color="") +
+        theme(text = element_text(size = 13)) +
+        theme(panel.spacing = unit(1, "lines")) + #increase distance between facet_plots
+        facet_grid(.~SampleType) +
+        scale_x_discrete(position = "left")
+       
+```
+
+
+
+###Fig 4C: Beta diversity
+Bray-Curtis distances
+```{r Preparing the data}
+make_body_site_pcoa <- function (sample_type) {
+  s_temp <- s_sites %>%
+    filter(SampleType %in% sample_type)
+  bc_temp <- dist_subset(bc, s_temp$SampleID)
+  pc <- pcoa(bc_temp)
+  pctvar <- round(pc$values$Relative_eig * 100)
+  coords <- pc$vectors %>%
+    as.data.frame() %>%
+    rownames_to_column("SampleID") %>%
+    select(1:4)
+  s_temp %>%
+  left_join(coords, by="SampleID") %>%
+    ggplot(aes(x=Axis.1, y=Axis.2)) +
+    geom_point(aes(fill=study_group), shape= 21, size=5) +
+    scale_fill_manual(values= cols_group) +
+    labs(
+      x=paste0("PC1 (", pctvar[1], "%)"),
+      y=paste0("PC2 (", pctvar[2], "%)"),
+      fill="Treatment") +
+    ggtitle(sample_type) +
+    theme_boxplot() +
+    theme(plot.title = element_text(hjust = 0.5))
+}
+```
+
+```{r PLOT PCoA, fig.height=3, fig.width=8}
+p1 <- make_body_site_pcoa("Oral Swab")
+p2 <- make_body_site_pcoa("Dental Plaque")
+p3 <- make_body_site_pcoa("Feces")
+ggpubr::ggarrange(p1, p2, p3, ncol = 3, nrow = 1, common.legend = TRUE)
+```
+
+
+
+```{r PCOA stats}
+test_body_site_dist <- function (sample_type) {
+  s_temp <- s_sites %>%
+    filter(SampleType %in% sample_type)
+  bc_temp <- dist_subset(bc, s_temp$SampleID)
+  res <- adonis(bc_temp ~ study_group, data=s_temp)
+  res$aov.tab %>%
+    as_tibble(rownames="Term")
+}
+tibble(body_site = sample_type_levels) %>%
+  group_by(body_site) %>%
+  do(test_body_site_dist(.$body_site)) %>%
+  filter(Term %in% "study_group") %>%
+  rename(Pvalue = `Pr(>F)`) %>%
+  select(Term, R2, Pvalue)
+```
+
+
+
