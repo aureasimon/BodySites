@@ -1,0 +1,208 @@
+---
+title: "Body-sites microbiome in animal model: drug repurposing TB"
+subtitle: "Figure 3D: LDA"
+author: "Aurea Simon-Soro and Kyle Bittinger"
+date: "06/12/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r knitr setup, echo=FALSE}
+### ================
+###   knitr setup
+### ================
+library(knitr)
+opts_chunk$set(
+  tidy=FALSE,
+  cache=TRUE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  dpi=100,
+  fig.width=8,
+  fig.height=8,
+  fig.align = "center"
+  )
+```
+
+
+
+
+```{r}
+
+library(reshape2)
+library(ggplot2)
+library(grid)
+library(directlabels)
+library(ellipse)
+```
+
+```{r}
+cgreen <- rgb(77,175,74,maxColorValue =255)
+cpurple <- rgb(152,78,163,maxColorValue =255)
+cblue <- rgb(55,126,184,maxColorValue =255)
+cred <- rgb(228,26,28,maxColorValue =255)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+
+#I will use tb_taxa that I created before melting the main taxa and its proportion by sampletype and study_group (treatment)
+bm <- assignment_counts %>%
+  filter(SampleID %in% s_sites$SampleID) %>%
+  mutate(Assignment = fct_lump(Assignment, n=10, w=Proportion)) %>%
+  # Sum in each sample
+  group_by(SampleID, Assignment) %>%
+  summarize(Proportion = sum(Proportion)) %>%
+  ungroup() %>%
+  left_join(s_sites, by="SampleID") 
+ 
+
+
+bm <- subset(bm, Proportion!="")
+bm <- arrange(bm, SampleID, study_group, Assignment, SampleType, Proportion)
+
+library(plyr)
+bms <- ddply(bm, .(SampleID, study_group, Assignment, SampleType, Proportion), function (x) {
+  if (grepl("/", x$Proportion, fixed=T)) {
+    print(x$Proportion)
+    ns <- unlist(strsplit(x$Proportion, "/", fixed=T))
+    print(ns)
+    data.frame(
+      SampleID=x$SampleID,
+      study_group=x$study_group,
+      TaxonLabel=x$Assignment,
+      Proportion=as.numeric(ns))
+  } else {
+    x
+  }
+})
+bms <- arrange(bms, SampleID, study_group, Assignment)
+write.table(
+  bms, file="ALL_TaxonLabel_basic.tsv",
+  quote=F, sep="\t", row.names=F)
+```
+
+```{r Preparing data }
+
+a <- read.delim("ALL_TaxonLabel_basic.tsv", check.names=F)
+
+#Create a column with binary containing or not TB treatment: TRUE=c(TB, NPC.TB), FALSE=c(PBS,NPC)
+a <- a %>%
+      mutate(study_group, study_group_binary = ifelse(grepl("TB",a$study_group),'TRUE','FALSE'))
+
+#Create a new dataframe containing essential columns
+am <- aggregate(Proportion ~ Assignment + SampleID + study_group_binary + study_group + SampleType, a, sum) 
+
+with(am, table(Assignment, study_group_binary)) #Counting sample number by study_group appears the assignment
+
+s <- aggregate(study_group_binary ~ SampleID + Assignment + Proportion, a, FUN=head, n=1)
+s$study_group_binary <- factor(s$study_group_binary, levels=c("TRUE", "FALSE"))
+
+#SampleID created for the lateer analysis as vector
+study_groups <- s$study_group_binary
+names(study_groups) <- as.character(s$SampleID)
+```
+
+
+```{r PCA}
+ac <- acast(am, SampleID ~ Assignment, value.var="Proportion", fill=0)
+
+#In binary study_groups
+ac_study_groups <- study_groups[rownames(ac)]
+
+summary(manova(ac ~ ac_study_groups),tol=0) 
+
+library(plyr)
+arrange(ddply(am, .(Assignment), function (x) {
+  summary(aov(scale(Proportion) ~ study_group_binary, x))[[1]][1,]
+}), `Pr(>F)`)
+
+pc <- prcomp(ac, scale.=T) #Principal Component analysis based on study_group and assignment Props (ac)
+
+pcdf <- data.frame(SampleID=rownames(pc$x), PC1=pc$x[,1], PC2=pc$x[,2])
+pcdf <- merge(pcdf, s, by="SampleID")
+
+#PCA plot
+loading_df <- as.data.frame(3 * sweep(pc$rotation, 2, pc$sdev, `*`)[,1:2])
+loading_df$Assignment <- rownames(loading_df) 
+loading_df <- loading_df %>%
+  separate(Assignment, c("Phylum", "Taxa"), " ")
+loading_df[is.na(loading_df)] <- c("Other")
+biplot(prcomp(ac, scale.=T))
+
+```
+
+
+
+##Kyle code
+```{r}
+library(MASS)
+
+ld <- lda(ac, grouping=c(study_groups)[rownames(ac)]) 
+ld
+plot(ld)
+#List of elements: class= LDA's prediction about treatment; posterior= matrix probability that the corresponding observation belongs to the class; x= linear discriminants
+predict(ld)
+
+ld$svd
+
+ld_df <- do.call(data.frame, predict(ld))
+ld_df$SampleID <- rownames(ld_df)
+ld_df <- merge(ld_df, a, by="SampleID")
+ggplot(ld_df) + 
+  geom_point(aes(x=LD1, y=Proportion, color=class), binwidth=0.3) + 
+  scale_color_manual(values = cols_group) +
+  labs(x="Linear discriminant coefficients", y="Relative Proportion", color="study_group") +
+  facet_wrap(Assignment ~ SampleType, scales="free_y") + 
+  theme_boxplot() +
+  theme(text = element_text(size = 14))
+Sys.sleep(1)
+
+```
+
+
+```{r}
+library(vegan)
+adonis(ac ~ study_groups[rownames(ac)])
+```
+
+```{r}
+# Assign levels
+ld_df$study_group <- factor(ld_df$study_group, levels = c("PBS", "NPC", "TB", "NPC.TB"))
+
+study_group_levels <- c("PBS", "NPC", "TB", "NPC.TB")
+binary_group_levels <- c("FALSE", "TRUE")
+
+ld_df %>%
+  mutate(study_group = fct_relevel(study_group, study_group_levels)) %>%
+  mutate(SampleType = fct_relevel(SampleType, sample_type_levels)) %>%
+ggplot() + 
+  geom_point(aes(x=SampleID, y=LD1, fill=study_group, shape=SampleType), size=5) + 
+  scale_fill_manual(values = cols_group) +
+  scale_shape_manual(values=c(21, 24, 23)) +
+  labs(y="Linear discriminant coefficients", x="SampleID", fill="", shape="") +
+  facet_grid(~ SampleType, scales="free") + 
+  theme_boxplot() +
+  theme(text = element_text(size = 12), axis.text.x = element_text(angle = 90, hjust = 1, size = 8)) +
+  theme(strip.text.x = element_text(
+        size = 16, color = "black", face = "bold"),
+        legend.position="top") +
+   guides(fill=guide_legend(override.aes=list(shape=21)), shape=FALSE)
+
+Sys.sleep(1)
+
+ggsave(
+  "Figures/3D.LDA.pdf",
+  width=8, height=4, useDingbats=F)
+ggsave(
+  "Figures/3D.LDA.png",
+  width=8, height=4, dpi=200)
+```
+
+
+```
+
+
