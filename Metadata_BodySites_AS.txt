@@ -1,0 +1,81 @@
+#SampleID	Sample	SubjectID	SampleType	BodySite	Initial Caries	Moderate Caries	Severe Caries	Cage.N	Weight	C.albicans_CFU.ml	S.mutans_CFU.ml	HostSpecies	study_day	study_color	study_group
+DNAfreewater1	DNAfreewater1	NA	DNA-free water	DNA-free water	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+DNAfreewater2	DNAfreewater2	NA	DNA-free water	DNA-free water	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+DNAfreewater3	DNAfreewater3	NA	DNA-free water	DNA-free water	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+DNAfreewater4	DNAfreewater4	NA	DNA-free water	DNA-free water	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Env1	Env1	NA	Oral Swab	Oral	NA	NA	NA	NA	NA	NA	NA	NA	NA	Contamination Control	Contamination Control
+Env2	Env2	NA	Oral Swab	Oral	NA	NA	NA	NA	NA	NA	NA	NA	NA	Contamination Control	Contamination Control
+Env3	Env3	NA	Oral Swab	Oral	NA	NA	NA	NA	NA	NA	NA	NA	NA	Contamination Control	Contamination Control
+Env4	Env4	NA	Oral Swab	Oral	NA	NA	NA	NA	NA	NA	NA	NA	NA	Contamination Control	Contamination Control
+Extractblankswab1	Extractblankswab1	NA	Blank swab	Blank swab	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Extractblankswab2	Extractblankswab2	NA	Blank swab	Blank swab	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Extractblanktip1	Extractblanktip1	NA	Blank tip	Blank tip	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Extractblanktip2	Extractblanktip2	NA	Blank tip	Blank tip	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Extractemptywell1	Extractemptywell1	NA	Empty well	Empty well	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Extractemptywell2	Extractemptywell2	NA	Empty well	Empty well	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Extractemptywell3	Extractemptywell3	NA	Empty well	Empty well	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+Extractemptywell4	Extractemptywell4	NA	Empty well	Empty well	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+geneblock1	geneblock1	NA	Mock DNA	Mock DNA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+geneblock2	geneblock2	NA	Mock DNA	Mock DNA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+geneblock3	geneblock3	NA	mock DNA	mock DNA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+geneblock4	geneblock4	NA	mock DNA	mock DNA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+PI.2.2F	NPC.TB.2.2F	Pink.C2	Feces	Gut	NA	NA	NA	T.PI2	NA	NA	NA	Rat	42	Pink	NPC.TB
+PI.2.R52.PL	NPC.TB.2.R52.PL	Pink.R52	Dental Plaque	Oral	36	9	8	T.PI2	66.4	2420	1190000	Rat	43	Pink	NPC.TB
+PI.2.Sw	NPC.TB.2.Sw	Pink.R52	Oral Swab	Oral	36	9	8	T.PI2	66.4	2420	1190000	Rat	42	Pink	NPC.TB
+PI.3.2F	NPC.TB.3.2F	Pink.C3	Feces	Gut	NA	NA	NA	T.PI3	NA	NA	NA	Rat	42	Pink	NPC.TB
+PI.3.R53.PL	NPC.TB.3.R53.PL	Pink.R53	Dental Plaque	Oral	29	11	7	T.PI3	75.3	420	1370000	Rat	43	Pink	NPC.TB
+PI.3.Sw	NPC.TB.3.Sw	Pink.R53	Oral Swab	Oral	29	11	7	T.PI3	75.3	420	1370000	Rat	42	Pink	NPC.TB
+PI.4.2F	NPC.TB.4.2F	Pink.C4	Feces	Gut	NA	NA	NA	T.PI4	NA	NA	NA	Rat	42	Pink	NPC.TB
+PI.4.R56.PL	NPC.TB.4.R56.PL	Pink.R56	Dental Plaque	Oral	36	10	3	T.PI4	83	100	1600000	Rat	43	Pink	NPC.TB
+PI.4.Sw	NPC.TB.4.Sw	Pink.R56	Oral Swab	Oral	36	10	3	T.PI4	83	100	1600000	Rat	42	Pink	NPC.TB
+PI.5.2F	NPC.TB.5.2F	Pink.C5	Feces	Gut	NA	NA	NA	T.PI5	NA	NA	NA	Rat	42	Pink	NPC.TB
+PI.5.R57.PL	NPC.TB.5.R57.PL	Pink.R57	Dental Plaque	Oral	29	6	5	T.PI5	85.1	190	1140000	Rat	43	Pink	NPC.TB
+PI.5.Sw	NPC.TB.5.Sw	Pink.R57	Oral Swab	Oral	29	6	5	T.PI5	85.1	190	1140000	Rat	42	Pink	NPC.TB
+PI.6.2F	NPC.TB.6.2F	Pink.C6	Feces	Gut	NA	NA	NA	T.PI6	NA	NA	NA	Rat	42	Pink	NPC.TB
+PI.6.R60.PL	NPC.TB.6.R60.PL	Pink.R60	Dental Plaque	Oral	29	8	3	T.PI6	75.3	360	2010000	Rat	43	Pink	NPC.TB
+PI.6.Sw	NPC.TB.6.Sw	Pink.R60	Oral Swab	Oral	29	8	3	T.PI6	75.3	360	2010000	Rat	42	Pink	NPC.TB
+PU.1.2F	TB.1.2F	Purple.C1	Feces	Gut	NA	NA	NA	T.PU1	NA	NA	NA	Rat	42	Purple	TB
+PU.1.R61.PL	TB.1.R61.PL	Purple.R61	Dental Plaque	Oral	27	6	5	T.PU1	82.6	660	3200000	Rat	43	Purple	TB
+PU.1.Sw	TB.1.Sw	Purple.R61	Oral Swab	Oral	37	6	3	T.PU1	86.5	660	3200000	Rat	42	Purple	TB
+PU.2.2F	TB.2.2F	Purple.C2	Feces	Gut	NA	NA	NA	T.PU2	NA	NA	NA	Rat	42	Purple	TB
+PU.2.R64.PL	TB.2.R64.PL	Purple.R64	Dental Plaque	Oral	50	14	12	T.PU2	87.7	310	1550000	Rat	43	Purple	TB
+PU.2.Sw	TB.2.Sw	Purple.R64	Oral Swab	Oral	27	6	5	T.PU2	82.6	310	1550000	Rat	42	Purple	TB
+PU.4.2F	TB.4.2F	Purple.C4	Feces	Gut	NA	NA	NA	T.PU4	NA	NA	NA	Rat	42	Purple	TB
+PU.4.R68.PL	TB.4.R68.PL	Purple.R68	Dental Plaque	Oral	32	9	7	T.PU4	78.9	170	95000	Rat	43	Purple	TB
+PU.4.Sw	TB.4.Sw	Purple.R68	Oral Swab	Oral	50	14	12	T.PU4	87.7	170	95000	Rat	42	Purple	TB
+PU.5.2F	TB.5.2F	Purple.C5	Feces	Gut	NA	NA	NA	T.PU5	NA	NA	NA	Rat	42	Purple	TB
+PU.5.R70.PL	TB.5.R70.PL	Purple.R70	Dental Plaque	Oral	45	10	9	T.PU5	72.4	260	960000	Rat	43	Purple	TB
+PU.5.Sw	TB.5.Sw	Purple.R70	Oral Swab	Oral	32	9	7	T.PU5	78.9	260	960000	Rat	42	Purple	TB
+PU.6.2F	TB.6.2F	Purple.C6	Feces	Gut	NA	NA	NA	T.PU6	NA	NA	NA	Rat	42	Purple	TB
+PU.6.R71.PL	TB.6.R71.PL	Purple.R71	Dental Plaque	Oral	37	6	3	T.PU6	86.5	10	346000	Rat	43	Purple	TB
+PU.6.Sw	TB.6.Sw	Purple.R71	Oral Swab	Oral	45	10	9	T.PU6	72.4	10	346000	Rat	42	Purple	TB
+R.1.R14.PL	NPC.1.R14.PL	Red.R14	Dental Plaque	Oral	25	7	4	T.R1	73.1	100	5270000	Rat	43	Red	NPC
+R.1.Sw	NPC.1.Sw	Red.R14	Oral Swab	Oral	25	7	4	T.R1	73.1	100	5270000	Rat	42	Red	NPC
+R.2.2F	NPC.2.2F	Red.C2	Feces	Gut	NA	NA	NA	T.R2	NA	NA	NA	Rat	42	Red	NPC
+R.2.R16.PL	NPC.2.R16.PL	Red.R16	Dental Plaque	Oral	24	2	2	T.R2	95.8	10	1520000	Rat	43	Red	NPC
+R.2.Sw	NPC.2.Sw	Red.R16	Oral Swab	Oral	24	2	2	T.R2	95.8	10	1520000	Rat	42	Red	NPC
+R.3.2F	NPC.3.2F	Red.C3	Feces	Gut	NA	NA	NA	T.R3	NA	NA	NA	Rat	42	Red	NPC
+R.3.R17.PL	NPC.3.R17.PL	Red.R17	Dental Plaque	Oral	45	13	8	T.R3	73.3	200	1660000	Rat	43	Red	NPC
+R.3.Sw	NPC.3.Sw	Red.R17	Oral Swab	Oral	45	13	8	T.R3	73.3	200	1660000	Rat	42	Red	NPC
+R.4.2F	NPC.4.2F	Red.C4	Feces	Gut	NA	NA	NA	T.R4	NA	NA	NA	Rat	42	Red	NPC
+R.5.2F	NPC.5.2F	Red.C5	Feces	Gut	NA	NA	NA	T.R5	NA	NA	NA	Rat	42	Red	NPC
+R.5.R22.PL	NPC.5.R22.PL	Red.R22	Dental Plaque	Oral	47	20	16	T.R5	93.7	660	1070000	Rat	43	Red	NPC
+R.5.Sw	NPC.5.Sw	Red.R22	Oral Swab	Oral	47	20	16	T.R5	93.7	660	1070000	Rat	42	Red	NPC
+R.6.2F	NPC.6.2F	Red.C6	Feces	Gut	NA	NA	NA	T.R6	NA	NA	NA	Rat	42	Red	NPC
+R.6.R24.PL	NPC.6.R24.PL	Red.R24	Dental Plaque	Oral	39	10	8	T.R6	68.6	210	1430000	Rat	43	Red	NPC
+R.6.Sw	NPC.6.Sw	Red.R24	Oral Swab	Oral	39	10	8	T.R6	68.6	210	1430000	Rat	42	Red	NPC
+Y.1.2F	PBS.1.2F	Yellow.C1	Feces	Gut	NA	NA	NA	T.Y1	NA	NA	NA	Rat	42	Yellow	PBS
+Y.1.R2.PL	PBS.1.R2.PL	Yellow.R2	Dental Plaque	Oral	39	24	17	T.Y1	82.3	310	2730000	Rat	43	Yellow	PBS
+Y.1.Sw	PBS.1.Sw	Yellow.R2	Oral Swab	Oral	39	24	17	T.Y1	82.3	310	2730000	Rat	42	Yellow	PBS
+Y.2.2F	PBS.2.2F	Yellow.C2	Feces	Gut	NA	NA	NA	T.Y2	NA	NA	NA	Rat	42	Yellow	PBS
+Y.2.R3.PL	PBS.2.R3.PL	Yellow.R3	Dental Plaque	Oral	39	19	14	T.Y2	74	190	508000	Rat	43	Yellow	PBS
+Y.2.Sw	PBS.2.Sw	Yellow.R3	Oral Swab	Oral	39	19	14	T.Y2	74	190	508000	Rat	42	Yellow	PBS
+Y.3.2F	PBS.3.2F	Yellow.C3	Feces	Gut	NA	NA	NA	T.Y3	NA	NA	NA	Rat	42	Yellow	PBS
+Y.3.R5.PL	PBS.3.R5.PL	Yellow.R5	Dental Plaque	Oral	58	25	19	T.Y3	72.2	1190	1940000	Rat	43	Yellow	PBS
+Y.3.Sw	PBS.3.Sw	Yellow.R5	Oral Swab	Oral	58	25	19	T.Y3	72.2	1190	1940000	Rat	42	Yellow	PBS
+Y.5.2F	PBS.5.2F	Yellow.C5	Feces	Gut	NA	NA	NA	T.Y5	NA	NA	NA	Rat	42	Yellow	PBS
+Y.5.R10.PL	PBS.5.R10.PL	Yellow.R10	Dental Plaque	Oral	52	13	6	T.Y5	88.4	910	1680000	Rat	43	Yellow	PBS
+Y.5.Sw	PBS.5.Sw	Yellow.R10	Oral Swab	Oral	52	13	6	T.Y5	88.4	910	1680000	Rat	42	Yellow	PBS
+Y.6.2F	PBS.6.2F	Yellow.C6	Feces	Gut	NA	NA	NA	T.Y6	NA	NA	NA	Rat	42	Yellow	PBS
+Y.6.R12.PL	PBS.6.R12.PL	Yellow.R12	Dental Plaque	Oral	42	14	12	T.Y6	75.2	90	1240000	Rat	43	Yellow	PBS
+Y.6.Sw	PBS.6.Sw	Yellow.R12	Oral Swab	Oral	42	14	12	T.Y6	75.2	90	1240000	Rat	42	Yellow	PBS
